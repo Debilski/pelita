@@ -4,6 +4,8 @@ import traceback
 import threading as _threading
 import logging
 
+from Queue import Queue, Empty as QueueEmpty, Full as QueueFull
+
 _logger = logging.getLogger("pelita.threading")
 #_logger.setLevel(logging.DEBUG)
 

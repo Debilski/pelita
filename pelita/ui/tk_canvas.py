@@ -2,11 +2,11 @@
 
 import Tkinter
 import tkFont
-import Queue
 
 from .. import datamodel
 from .tk_sprites import *
 from ..utils.signal_handlers import wm_delete_window_handler
+from ..utils import QueueEmpty
 
 def guess_size(display_string, bounding_width, bounding_height, rel_size=0):
     no_lines = display_string.count("\n") + 1
@@ -387,7 +387,7 @@ class TkApplication(object):
                 if not event:
                     self.master.after(1, self.read_queue)
                 return
-        except Queue.Empty:
+        except QueueEmpty:
             self.observe({})
             if not event:
                 self.master.after(1, self.read_queue)

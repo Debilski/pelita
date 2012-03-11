@@ -5,7 +5,6 @@ General and local actor definitions.
 """
 
 
-import Queue
 import uuid
 import inspect
 from threading import Lock
@@ -14,7 +13,7 @@ import logging
 _logger = logging.getLogger("pelita.actor")
 _logger.setLevel(logging.DEBUG)
 
-from ..utils import SuspendableThread, CloseThread
+from ..utils import SuspendableThread, CloseThread, Queue, QueueEmpty
 
 __docformat__ = "restructuredtext"
 
@@ -45,7 +44,7 @@ class Request(Channel):
     The `Actor` may then reply to the `Request` exactly once.
     """
     def __init__(self):
-        self._queue = Queue.Queue(maxsize=1)
+        self._queue = Queue(maxsize=1)
 
     def put(self, message, channel=None, remote=None):
         """ Sets the result of the Request to `message`.
@@ -75,7 +74,7 @@ class Request(Channel):
         """Returns the result or None, if the value is not available."""
         try:
             return self._queue.get(timeout).result
-        except Queue.Empty:
+        except QueueEmpty:
             return None
 
     def has_result(self):
@@ -135,7 +134,7 @@ class BaseActor(SuspendableThread):
         """
         try:
             message, channel, priority, remote = self.handle_inbox()
-        except Queue.Empty:
+        except QueueEmpty:
             return
 
         if isinstance(message, Exit):
@@ -204,12 +203,12 @@ class BaseActor(SuspendableThread):
 class Actor(BaseActor):
     # TODO Handle messages not replied to – else the queue is waiting forever
     def __init__(self, inbox=None, **kwargs):
-        self._inbox = inbox or Queue.Queue()
+        self._inbox = inbox or Queue()
 
         super(Actor, self).__init__(**kwargs)
 
     def handle_inbox(self):
-        """ Reads the next item from the Queue or raises Queue.Empty
+        """ Reads the next item from the Queue or raises QueueEmpty
         """
         msg = self._inbox.get(True, 3)
         return (msg.get("message"),

@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import Queue
 import copy
 import Tkinter
 
@@ -8,6 +7,7 @@ import logging
 
 from pelita.viewer import AbstractViewer
 from pelita.ui.tk_canvas import TkApplication
+from ..utils import Queue, QueueEmpty, QueueFull
 
 _logger = logging.getLogger("pelita.tk_viewer")
 _logger.setLevel(logging.DEBUG)
@@ -69,7 +69,7 @@ class TkViewer(AbstractViewer):
 
     """
     def __init__(self, queue_size=1, geometry=None, timeout=0.5):
-        self.observe_queue = Queue.Queue(maxsize=queue_size)
+        self.observe_queue = Queue(maxsize=queue_size)
 
         self.root = Tkinter.Tk()
         if geometry is None:
@@ -93,7 +93,7 @@ class TkViewer(AbstractViewer):
     def _put(self, obj):
         try:
             self.observe_queue.put(obj, self.block, self.timeout)
-        except Queue.Full:
+        except QueueFull:
             _logger.info("Queue is filled. Skipping.")
             pass
 

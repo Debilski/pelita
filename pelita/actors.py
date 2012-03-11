@@ -5,11 +5,11 @@ between GameMaster and client Teams over the network.
 """
 
 import sys
-import Queue
 
 import logging
 import time
 from pelita.viewer import DumpingViewer
+from .utils import QueueEmpty
 
 _logger = logging.getLogger("pelita")
 _logger.setLevel(logging.DEBUG)
@@ -69,7 +69,7 @@ class _ViewerActor(DispatchingActor):
             if self._server.query("register_viewer_actor", [self.ref.uuid]).get(timeout) == "ok":
                 _logger.info("Connection accepted")
                 self.ref.reply("ok")
-        except Queue.Empty:
+        except QueueEmpty:
             self.ref.reply("actor no reply")
         except ActorNotRunning:
             # local server is not yet running. Try again later
@@ -108,7 +108,7 @@ class ViewerActor(object):
                 print res
             if res == "ok":
                 return True
-        except Queue.Empty:
+        except QueueEmpty:
             if not silent:
                 print "failed due to timeout in actor."
         return False
@@ -152,7 +152,7 @@ class _ClientActor(DispatchingActor):
             if self.server_actor.query("hello", [team_name, self.ref.uuid]).get(2) == "ok":
                 _logger.info("Connection accepted")
                 self.ref.reply("ok")
-        except Queue.Empty:
+        except QueueEmpty:
             self.ref.reply("actor no reply")
         except ActorNotRunning:
             # local server is not yet running. Try again later
@@ -202,7 +202,7 @@ class ClientActor(object):
     def is_server_connected(self):
         try:
             return self.actor_ref.query("is_server_connected").get()
-        except Queue.Empty:
+        except QueueEmpty:
             return None
 
     def register_team(self, team):
@@ -239,7 +239,7 @@ class ClientActor(object):
                 print res
             if res == "ok":
                 return True
-        except Queue.Empty:
+        except QueueEmpty:
             if not silent:
                 print "failed due to timeout in actor."
         return False
@@ -277,13 +277,13 @@ class RemoteTeamPlayer(object):
     def _set_bot_ids(self, bot_ids):
         try:
             return self.ref.query("set_bot_ids", bot_ids).get(TIMEOUT)
-        except (Queue.Empty, ActorNotRunning, DeadConnection):
+        except (QueueEmpty, ActorNotRunning, DeadConnection):
             pass
 
     def _set_initial(self, universe):
         try:
             return self.ref.query("set_initial", [universe]).get(TIMEOUT)
-        except (Queue.Empty, ActorNotRunning, DeadConnection):
+        except (QueueEmpty, ActorNotRunning, DeadConnection):
             pass
 
     def _get_move(self, bot_idx, universe):
@@ -293,7 +293,7 @@ class RemoteTeamPlayer(object):
         except TypeError:
             # if we could not convert into a tuple (e.g. bad reply)
             return None
-        except Queue.Empty:
+        except QueueEmpty:
             # if we did not receive a message in time
             raise PlayerTimeout()
         except (ActorNotRunning, DeadConnection):
