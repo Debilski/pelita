@@ -4,7 +4,10 @@ import traceback
 import threading as _threading
 import logging
 
-from Queue import Queue, Empty as QueueEmpty, Full as QueueFull
+from gevent import Greenlet
+from gevent.queue import Queue, Empty as QueueEmpty, Full as QueueFull
+
+#from Queue import Queue, Empty as QueueEmpty, Full as QueueFull
 
 _logger = logging.getLogger("pelita.threading")
 #_logger.setLevel(logging.DEBUG)
@@ -20,7 +23,8 @@ class SuspendableThread(object):
     def __init__(self):
         # get a (unique?) name for the thread
         # we add the class name, so we know who started the thread
-        self._thread = _threading.Thread(target=self.run, name=_newname(self.__class__))
+#        self._thread = _threading.Thread(target=self.run, name=_newname(self.__class__))
+        self._thread = Greenlet(self.run)
         self._running = False
 
         # Define a special event which can be flagged to wait.

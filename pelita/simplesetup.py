@@ -314,7 +314,11 @@ class SimpleClient(object):
     def autoplay_thread(self):
         # We cannot use multiprocessing in a local game.
         # Or that is, we cannot until we also use multiprocessing Queues.
-        background_thread = threading.Thread(target=self.autoplay)
+        # background_thread = threading.Thread(target=self.autoplay)
+
+        from gevent import Greenlet
+        background_thread = Greenlet(self.autoplay)
+
         background_thread.start()
         return background_thread
 

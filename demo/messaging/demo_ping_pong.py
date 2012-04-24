@@ -4,10 +4,28 @@ from datetime import datetime
 
 from pelita.messaging import DispatchingActor, expose, actor_of, actor_registry, StopProcessing, RemoteConnection
 
+
+class PingRelay2(DispatchingActor):
+    @expose
+    def wait_a_bit(self):
+        self.ref.reply("Yes")
+
+class PingRelay(DispatchingActor):
+    def on_start(self):
+        self.ping_relay = actor_of(PingRelay2)
+        self.ping_relay.start()
+
+    @expose
+    def wait_a_bit(self):
+        self.ref.reply(self.ping_relay.query("wait_a_bit").get())
+
 class Ping(DispatchingActor):
     def on_start(self):
         self.pong = None
         self.pings_left = 2000
+
+        self.ping_relay = actor_of(PingRelay)
+        self.ping_relay.start()
 
     @expose
     def connect(self, actor_uuid):
@@ -29,6 +47,9 @@ class Ping(DispatchingActor):
 
     @expose
     def Pong(self):
+        result = self.ping_relay.query("wait_a_bit")
+        result.get()
+
         if self.pings_left % 100 == 0:
             print "Ping: pong from: " + str(self.ref.channel)
         if self.pings_left > 0:
