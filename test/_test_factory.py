@@ -144,6 +144,55 @@ class TestMovementSettings(object):
             self.enemy_moves = enemy_moves, []
         self.second_team = second_team
 
+class TestMovement(unittest.TestCase):
+    def assert_movement(self, movement):
+        try:
+            self._did_run_tests
+        except AttributeError:
+            self._did_run_tests = False
+
+        if not self._did_run_tests:
+            self.run_pelita()
+
+
+            if not self.silent:
+                print " "
+            game = GameMaster(settings.layout, 4, 200, noise=False, silent=True)
+            team = [self.player()]
+            if settings.use_bots == 2:
+                team.append(self.player())
+            else:
+                team.append(StoppingPlayer())
+            enemies = [TestPlayer(settings.enemy_moves[0]),
+                       TestPlayer(settings.enemy_moves[1])]
+            if not settings.second_team:
+                game.register_team(SimpleTeam(team[0], team[1]))
+                game.register_team(SimpleTeam(enemies[0], enemies[1]))
+            else:
+                game.register_team(SimpleTeam(enemies[0], enemies[1]))
+                game.register_team(SimpleTeam(team[0], team[1]))
+            test_steps = settings.expect[0].keys()
+            test_steps += settings.expect[1].keys()
+            game.set_initial()
+            for i in range(0, max(test_steps)+1):
+                for enemy in enemies:
+                    if len(enemy.moves) == 0:
+                        enemy.moves.append(stop)
+                game.play_round(i)
+                for bot in range(0, settings.use_bots):
+
+                    target_pos = ""
+                    if settings.expect[bot].has_key(i):
+                        target_pos = "should be "+str(settings.expect[bot][i])
+                        self.assertEqual(settings.expect[bot][i],
+                            team[bot].current_pos)
+                    if not self.silent:
+                        print " ", i, ": ", team[bot].current_pos, target_pos
+
+
+        self._did_run_tests = True
+
+
 class GeneratedTests(unittest.TestCase):
     """ Container for generated tests.
 
