@@ -1,21 +1,25 @@
 from _test_factory import TestMovementSettings, GeneratedTests, generate_from_list
 from pelita.datamodel import north, south, west, east, stop
 
-error = TestMovementSettings(
-name   = "ValueError",
-layout =
-"""########
-   #2    1#
-   #.  ##.#
-   #.  0#.#
-   #   ##3#
-   ########""",
-expect= ({0: (6,1), 5:(4,1)},
-         {0: (6,4)}),
-enemy_moves = ([west, stop, stop, stop],
-               [west, west, stop, east, east]),
-second_team = True
-)
+
+class TestBasicDefensePlayer(TestMovementSettings):
+    def setUp(self):
+        self.layout = """########
+                         #2    1#
+                         #.  ##.#
+                         #.  0#.#
+                         #   ##3#
+                         ########"""
+        self.second_team = True
+        self.player_class = BasicDefensePlayer
+
+    def test_BDPlayer(self):
+        self.enemy_moves = ([west, stop, stop, stop],
+                            [west, west, stop, east, east])
+
+        self.assertMovement({0: (6,1), 5:(4,1)},
+                            {0: (6,4)})
+
 
 tracking_2 = TestMovementSettings(
 name   = "stop tracking 2",
