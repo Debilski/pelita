@@ -67,6 +67,7 @@ import unittest
 from pelita.game_master import GameMaster
 from pelita.player import TestPlayer, StoppingPlayer, SimpleTeam
 from pelita.datamodel import stop
+from pelita.viewer import AbstractViewer
 
 class TestAttributeSettings(object):
     """ Container for the settings of a property test.
@@ -144,36 +145,58 @@ class TestMovementSettings(object):
             self.enemy_moves = enemy_moves, []
         self.second_team = second_team
 
+class LogViewer(AbstractViewer):
+    def __init__(self, log_to):
+        self.log_to = log_to
+
+    def observe(self, round_, turn, universe, events):
+        print universe
+
+
+class GameState(object):
+    def __init__(self):
+        self.game_master = None
+        self.movements = []
+
 class TestMovement(unittest.TestCase):
-    def assert_movement(self, movement):
-        try:
-            self._did_run_tests
-        except AttributeError:
-            self._did_run_tests = False
+    def setUp(self):
 
-        if not self._did_run_tests:
-            self.run_pelita()
+        self.set_up_player()
 
+    def set_up_player(self):
+        """ Override this method with setup code
+        """
+        pass
+
+    def assert_movement(self, *asserted_movements):
+        if not hasattr(self, "game_state"):
+            self.game_state = GameState()
+
+        if not self.game_state.game_master:
+            self.game_state.game_master = GameMaster(self.layout, 4, 200, noise=False, silent=True)
 
             if not self.silent:
                 print " "
-            game = GameMaster(settings.layout, 4, 200, noise=False, silent=True)
+
             team = [self.player()]
-            if settings.use_bots == 2:
+            if self.use_bots == 2:
                 team.append(self.player())
             else:
                 team.append(StoppingPlayer())
-            enemies = [TestPlayer(settings.enemy_moves[0]),
-                       TestPlayer(settings.enemy_moves[1])]
-            if not settings.second_team:
-                game.register_team(SimpleTeam(team[0], team[1]))
-                game.register_team(SimpleTeam(enemies[0], enemies[1]))
+
+            enemies = [TestPlayer(list(reversed(self.enemy_moves[0]))),
+                       TestPlayer(list(reversed(self.enemy_moves[1])))]
+
+            if not self.second_team:
+                self.game_state.game_master.register_team(SimpleTeam(team[0], team[1]))
+                self.game_state.game_master.register_team(SimpleTeam(enemies[0], enemies[1]))
             else:
-                game.register_team(SimpleTeam(enemies[0], enemies[1]))
-                game.register_team(SimpleTeam(team[0], team[1]))
-            test_steps = settings.expect[0].keys()
-            test_steps += settings.expect[1].keys()
-            game.set_initial()
+                self.game_state.game_master.register_team(SimpleTeam(enemies[0], enemies[1]))
+                self.game_state.game_master.register_team(SimpleTeam(team[0], team[1]))
+
+            self.game_state.game_master.register_viewer(LogViewer(self.game_state.log))
+
+            self.game_state.game_master.set_initial()
             for i in range(0, max(test_steps)+1):
                 for enemy in enemies:
                     if len(enemy.moves) == 0:
@@ -188,9 +211,6 @@ class TestMovement(unittest.TestCase):
                             team[bot].current_pos)
                     if not self.silent:
                         print " ", i, ": ", team[bot].current_pos, target_pos
-
-
-        self._did_run_tests = True
 
 
 class GeneratedTests(unittest.TestCase):
