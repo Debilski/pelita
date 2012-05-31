@@ -32,21 +32,17 @@ init_game = function() {
   agents[3] = new Agent("agent3_80.png", new Position(0,0));
 
   inited = true;
-}
-
+};
 
 function hasWall(x, y) {
+  try {
   return wall[x][y] == 1;
+  } catch (e) { return false; }
 }
 
 function hasFood(x, y) {
   return food[x][y] == 1;
 }
-
-var gridX = wall.length;
-var gridY = wall[0].length;
-
-var scale = 30;
 
 function scaleX(x) {
   return scale + scale * x;
@@ -147,6 +143,12 @@ function Agent(img, initialPosition) {
   }
 }
 
+gridX = function() { return wall.length; };
+gridY = function() { return wall[0].length; };
+
+var scale = 30;
+
+
 void drawAgent(agent) {
   var posx = agent.position.x * 30;
   var posy = agent.position.y * 30;
@@ -154,7 +156,7 @@ void drawAgent(agent) {
 }
 
 void setup() {
-  size(1200, 800); //scaleX(gridX), scaleY(gridY));
+  size(400, 400); //scaleX(gridX), scaleY(gridY));
   background(225);  
   fill(255);  
   //noLoop();
@@ -163,17 +165,32 @@ void setup() {
 } 
 
 void drawGrid() {
+
+  size(scaleX(gridX()), scaleY(gridY()));
+
   pushStyle();
   stroke(187,20,20);
   fill(187,20,20);
-  strokeWeight(3);
+  strokeWeight(5);
   ellipseMode(CENTER);
+
+  pushStyle();
+  strokeCap(ROUND);
 
   for (var i=0; i<wall.length; i++) {
     for (var j=0; j<wall[i].length; j++) {
       if (hasWall(i, j)) {
-        ellipse(scaleX(i), scaleY(j), 3, 3);
+        if (hasWall(i, j+1)) line(scaleX(i), scaleY(j), scaleX(i), scaleY(j + 1));
+        if (hasWall(i+1, j)) line(scaleX(i), scaleY(j), scaleX(i+1), scaleY(j));
+
+//        ellipse(scaleX(i), scaleY(j), 3, 3);
       }
+    }
+  }
+  popStyle();
+
+  for (var i=0; i<wall.length; i++) {
+    for (var j=0; j<wall[i].length; j++) {
       if (hasFood(i, j)) {
         pushStyle();
         stroke(187,187,20);
@@ -190,6 +207,7 @@ void draw(){
     background(225);
 
     if (! inited) return;
+
 
     drawGrid();
 
