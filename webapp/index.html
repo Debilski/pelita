@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head><meta content="text/html; charset=UTF-8" http-equiv="content-type" /><title>Pelita</title>
+    <script src="processing-1.3.6.min.js"></script> 
+  </head>
+  <body>
+    <div id="main">
+
+      <script type="text/javascript">
+        var agents = Array();
+      </script>
+
+        <canvas id="canvas1" data-processing-sources="pelita.pde"></canvas>
+
+        <script type="text/javascript">
+
+          var ws = new WebSocket("ws://localhost:51011/");
+          ws.onmessage = function(event) { 
+            data = JSON.parse(event.data);
+            wall = data.walls;
+            food = data.food;
+
+            init_game();
+
+            for (idx = 0; idx < data.bots.length; idx++) {
+              agents[idx].setNext(data.bots[idx].x, data.bots[idx].y);
+            }
+          }
+
+        function up(num) {
+        if (agents[num]) agents[num].up();
+        }
+        function down(num) {
+        if (agents[num]) agents[num].down();
+        }
+        function left(num) {
+        if (agents[num]) agents[num].left();
+        }
+        function right(num) {
+        if (agents[num]) agents[num].right();
+        }
+      </script>  
+
+      <form name="Formular" action="">
+        <input type="button" value=" ∧ " onclick="up(2)" />
+        <input type="button" value=" ∨ " onclick="down(2)" />
+        <input type="button" value=" &lt; " onclick="left(2)" />
+        <input type="button" value=" &gt; " onclick="right(2)" />
+      </form>
+
+
+    </div>
+  </body>
+</html>
+
