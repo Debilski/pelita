@@ -158,11 +158,12 @@ void drawAgent(agent) {
 void setup() {
   size(400, 400); //scaleX(gridX), scaleY(gridY));
   background(225);
+  background(255, 234, 150);
   fill(255);
   //noLoop();
   PFont fontA = loadFont("courier")
   textFont(fontA, 14);
-} 
+}
 
 void drawGrid() {
 
@@ -193,9 +194,10 @@ void drawGrid() {
     for (var j=0; j<wall[i].length; j++) {
       if (hasFood(i, j)) {
         pushStyle();
-        stroke(187,187,20);
+        strokeWeight(1);
+        stroke(18,18,20);
         fill(187,187,20);
-        ellipse(scaleX(i), scaleY(j), 4, 4);
+        ellipse(scaleX(i), scaleY(j), 10, 10);
         popStyle();
       }
     }
@@ -204,8 +206,6 @@ void drawGrid() {
 }
 
 void draw(){
-  background(225);
-
   if (! inited) return;
 
   drawGrid();
