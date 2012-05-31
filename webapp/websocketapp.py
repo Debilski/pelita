@@ -25,8 +25,9 @@ class WebSocketApp(object):
             msg = sock.recv()
             msg_objs = json_converter.loads(msg)
 
-            if msg_objs.get("universe"):
-                universe = msg_objs["universe"]
+            universe = msg_objs.get("universe")
+            game_state = msg_objs.get("game_state")
+            if universe:
 
                 if not walls:
                     walls = []
@@ -53,11 +54,15 @@ class WebSocketApp(object):
                                }
                     bots.append(bot_data)
 
+                teams = [{"name": t.name, "score": t.score} for t in universe.teams]
+
                 data = {'walls': walls,
                         'width': width,
                         'height': height,
                         'bots': bots,
-                        'food': food
+                        'food': food,
+                        'teams': teams,
+                        'state': game_state
                         }
                 data_json = json.dumps(data)
                 #print data_json
