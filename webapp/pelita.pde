@@ -36,7 +36,7 @@ init_game = function() {
 
 function hasWall(x, y) {
   try {
-  return wall[x][y] == 1;
+    return wall[x][y] == 1;
   } catch (e) { return false; }
 }
 
@@ -157,11 +157,11 @@ void drawAgent(agent) {
 
 void setup() {
   size(400, 400); //scaleX(gridX), scaleY(gridY));
-  background(225);  
-  fill(255);  
+  background(225);
+  fill(255);
   //noLoop();
-  PFont fontA = loadFont("courier");  
-  textFont(fontA, 14);    
+  PFont fontA = loadFont("courier")
+  textFont(fontA, 14);
 } 
 
 void drawGrid() {
@@ -183,7 +183,7 @@ void drawGrid() {
         if (hasWall(i, j+1)) line(scaleX(i), scaleY(j), scaleX(i), scaleY(j + 1));
         if (hasWall(i+1, j)) line(scaleX(i), scaleY(j), scaleX(i+1), scaleY(j));
 
-//        ellipse(scaleX(i), scaleY(j), 3, 3);
+        //        ellipse(scaleX(i), scaleY(j), 3, 3);
       }
     }
   }
@@ -195,7 +195,7 @@ void drawGrid() {
         pushStyle();
         stroke(187,187,20);
         fill(187,187,20);
-        ellipse(scaleX(i), scaleY(j), 3, 3);
+        ellipse(scaleX(i), scaleY(j), 4, 4);
         popStyle();
       }
     }
@@ -204,31 +204,30 @@ void drawGrid() {
 }
 
 void draw(){
-    background(225);
+  background(225);
 
-    if (! inited) return;
+  if (! inited) return;
 
+  drawGrid();
 
-    drawGrid();
+  // determine center and max clock arm length  
+  var centerX = width / 2, centerY = height / 2;  
+  var maxArmLength = Math.min(centerX, centerY);
 
-    // determine center and max clock arm length  
-    var centerX = width / 2, centerY = height / 2;  
-    var maxArmLength = Math.min(centerX, centerY);
-  
-    for (var i=0; i<agents.length; i++) {
-        agents[i].updatePosition(stepSize);
-    }
- 
-    for (var i=0; i<agents.length; i++) {
-      drawAgent(agents[i]);
-    }
- 
-    // stop, if all are placed
-    var needsUpdate = false;
-    for (var i=0; i < agents.length; i++) {
-      if (agents[i].needsUpdate()) { needsUpdate = true; }
-    }
-    
-    if (! needsUpdate) noLoop();
+  for (var i=0; i<agents.length; i++) {
+    agents[i].updatePosition(stepSize);
+  }
+
+  for (var i=0; i<agents.length; i++) {
+    drawAgent(agents[i]);
+  }
+
+  // stop, if all are placed
+  var needsUpdate = false;
+  for (var i=0; i < agents.length; i++) {
+    if (agents[i].needsUpdate()) { needsUpdate = true; }
+  }
+
+  if (! needsUpdate) noLoop();
 }
 
