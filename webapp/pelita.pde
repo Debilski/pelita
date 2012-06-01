@@ -183,7 +183,10 @@ void drawGrid() {
       if (hasWall(i, j)) {
         if (hasWall(i, j+1)) line(scaleX(i), scaleY(j), scaleX(i), scaleY(j + 1));
         if (hasWall(i+1, j)) line(scaleX(i), scaleY(j), scaleX(i+1), scaleY(j));
-
+        if (! (hasWall(i+1, j) || hasWall(i-1, j) || hasWall(i, j-1) || hasWall(i, j+1))) {
+          line(scaleX(i - 0.1), scaleY(j), scaleX(i + 0.1), scaleY(j));
+          line(scaleX(i), scaleY(j - 0.1), scaleX(i), scaleY(j + 0.1));
+        }
         //        ellipse(scaleX(i), scaleY(j), 3, 3);
       }
     }
