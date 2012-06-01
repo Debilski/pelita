@@ -12,6 +12,32 @@
       body {
         padding: 2em 3em;
       }
+
+      img.tally-1 {
+        height: 28px;
+        width: 16px;
+        background:url(tally_marks.png) 0 0;
+      }
+      img.tally-2 {
+        height: 28px;
+        width: 23px;
+        background:url(tally_marks.png) -16px 0;
+      }
+      img.tally-3 {
+        height: 28px;
+        width: 26px;
+        background:url(tally_marks.png) -44px 0;
+      }
+      img.tally-4 {
+        height: 28px;
+        width: 34px;
+        background:url(tally_marks.png) -71px 0;
+      }
+      img.tally-5 {
+        height: 28px;
+        width: 36px;
+        background:url(tally_marks.png) -103px 0;
+      }
     </style>
     <link href="bootstrap/css/bootstrap-responsive.css" rel="stylesheet">
   </head>
@@ -23,12 +49,16 @@
       </script>
 
 
-      <h1><span id="team_0"><span class="name">Team</span> <span class="score"></span></span> :
-        <span id="team_1"><span class="score"></span> <span class="name">Team</span></span></h1>
+      <h1><span class="team_0"><span class="name">Team a</span> <span class="score"></span></span> :
+        <span class="team_1"><span class="score"></span> <span class="name">Team b</span></span></h1>
 
       <p><span id="ws_status"class="label"></span></p>
 
       <p><i class="icon-info-sign"></i>Round: <span id="round_index"></span>; Last bot: <span id="bot_id"></span></p>
+
+      <h2>Killed</h2>
+      <p class="team_0"><b class="name">Team</b>: <span class="kill_tally"></span></p>
+      <p class="team_1"><b class="name">Team</b>: <span class="kill_tally"></span></p>
 
       <canvas id="canvas1" data-processing-sources="pelita.pde"></canvas>
 
@@ -59,10 +89,26 @@
 
             init_game();
 
-            $("#team_0 .name").text(teams[0].name);
-            $("#team_0 .score").text(teams[0].score);
-            $("#team_1 .name").text(teams[1].name);
-            $("#team_1 .score").text(teams[1].score);
+
+            $(".team_0").each(function(idx) {
+              $(this).find(".name").text(teams[0].name);
+              $(this).find(".score").text(teams[0].score);
+
+              var the_tally = "";
+              for (var idx = 1; idx < (state.kill_count[0] + 1) / 5; idx++) the_tally += "<img class='tally-5'></img>";
+              the_tally += "<img class='tally-" + (state.kill_count[0] % 5) + "'></img>";
+              $(this).find(".kill_tally").html(the_tally);
+            });
+            $(".team_1").each(function(idx) {
+              $(this).find(".name").text(teams[1].name);
+              $(this).find(".score").text(teams[1].score);
+
+              var the_tally = "";
+              for (var idx = 1; idx < (state.kill_count[1] + 1) / 5; idx++) the_tally += "<img class='tally-5'></img>";
+              the_tally += "<img class='tally-" + (state.kill_count[1] % 5) + "'></img>";
+              $(this).find(".kill_tally").html(the_tally);
+            });
+
 
             $("#round_index").text(state.round_index);
             $("#bot_id").text(state.bot_id);
