@@ -1,10 +1,13 @@
+import os
+import json
+
 import gevent
 from gevent_zeromq import zmq
 from geventwebsocket.handler import WebSocketHandler
+import paste.urlparser
 
 from pelita.messaging.json_convert import json_converter
 from pelita.datamodel import Wall, Food
-import json
 
 
 class WebSocketApp(object):
@@ -74,6 +77,11 @@ def main():
     browser and run the data producer"""
     context = zmq.Context()
     ws_server = gevent.pywsgi.WSGIServer(('', 51011), WebSocketApp(context), handler_class=WebSocketHandler)
+    http_server = gevent.pywsgi.WSGIServer( 
+            ('', 8000), 
+            paste.urlparser.StaticURLParser(os.path.dirname(__file__)))
+    http_server.start()
+    print "Serving pelita on http://localhost:8000"
     ws_server.serve_forever()
 
 main()
