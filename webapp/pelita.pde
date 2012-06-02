@@ -1,10 +1,16 @@
 // @pjs preload must be used to preload the image
 /* @pjs preload="agent1_80.png,agent2_80.png,agent3_80.png,agent4_80.png"; */
 
-var stepSize = 0.5;
+var stepSize = 2;
 var angleStep = 20;
 
 inited = false;
+
+animations = [];
+
+addAnimation = function(x, y, delay) {
+//  animations.push(new FoodAnimation(x, y, 1, 1, delay));
+};
 
 // Dummy wall
 wall = [
@@ -55,6 +61,80 @@ function scaleY(y) {
 function gridToReal(x, y) {
   return [scaleX(x), scaleY(y)];
 }
+
+function star(size) {
+  beginShape();
+  for (i=0; i<11; i=i+2) {
+    var angle_1 = (TWO_PI * i / 10.0) - HALF_PI;
+    var angle_i = (TWO_PI * (i+1) / 10.0) - HALF_PI;
+    var angle_2 = (TWO_PI * (i+2) / 10.0) - HALF_PI;
+    vertex(cos(angle_1) * size, sin(angle_1) * size, cos(angle_i) * size * 0.3, sin(angle_i) * size * 0.3);
+    vertex(cos(angle_i) * size * 0.3, sin(angle_i) * size * 0.3, cos(angle_2) * size, sin(angle_2) * size);
+  }
+  endShape();
+}
+
+StarAnimation = function(x, y, delay) {
+  this.x = x;
+  this.y = y;
+  this.start = millis();
+  this.delay = delay;
+  this.finished = function () {
+    return false;//this.start + this.delay < millis();
+  }
+  this.draw = function() {
+    pushStyle();
+    pushMatrix();
+    var elapsed = millis() - this.start;
+    fill(255, 255 * elapsed / this.delay);
+    stroke(187,20,20, 255 * elapsed / this.delay);
+
+    translate(scaleX(this.x), scaleY(this.y));
+    strokeWeight(1);
+
+    star(8 * elapsed / this.delay);
+    popMatrix();
+    popStyle();
+  }
+};
+
+FoodAnimation = function(startx, starty, endx, endy, delay) {
+  this.x = starty;
+  this.y = starty;
+  this.startx = startx;
+  this.starty = starty;
+  this.endx = endx;
+  this.endy = endy;
+  this.start = millis();
+  this.delay = delay;
+  this.finished = function () {
+    return this.start + this.delay < millis();
+  }
+  this.draw = function() {
+    console.log("draw");
+    pushMatrix();
+
+    if (this.start + this.delay > millis()) {
+      this.x = this.endx;
+      this.y = this.endy;
+    } else {
+      var elapsed = millis() - this.start;
+      this.x = this.startx + (this.endx - this.startx) * elapsed / this.delay;
+      this.y = this.starty + (this.endy - this.starty) * elapsed / this.delay;
+    }
+
+    translate(scaleX(this.x), scaleY(this.y));
+
+        pushStyle();
+        strokeWeight(1);
+        stroke(18,18,20);
+        fill(187,187,20);
+        ellipse(0, 0, 10, 10);
+        popStyle();
+
+    popMatrix();
+  }
+};
 
 function Position(x, y) {
   this.x = x;
@@ -174,6 +254,14 @@ void drawGrid() {
   fill(187,20,20);
   strokeWeight(5);
   ellipseMode(CENTER);
+
+
+  pushStyle();
+  for (var i=0; i<animations.length; i++) {
+    animations[i].draw();
+  }
+  animations = animations.filter(function(elem){ return ! elem.finished(); });
+  popStyle();
 
   pushStyle();
   strokeCap(ROUND);

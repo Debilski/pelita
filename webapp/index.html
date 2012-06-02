@@ -116,6 +116,12 @@
             for (idx = 0; idx < data.bots.length; idx++) {
               agents[idx].setNext(data.bots[idx].x, data.bots[idx].y);
             }
+
+            
+            for (idx = 0; idx < state.food_eaten.length; idx++) {
+              var pos = state.food_eaten[idx].food_pos;
+              addAnimation(pos[0], pos[1], 3000);
+            }
           };
 
         var ws_status = $("#ws_status");
