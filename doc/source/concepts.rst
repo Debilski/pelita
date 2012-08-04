@@ -1,5 +1,9 @@
-Writing a reflexive Player
-===========================
+===============
+Player Concepts
+===============
+
+Reflexive Player
+================
 
 We now want to document another way of writing a Player. Instead of estimating the best position from the current state, we may consider a *what if* approach: For each possible direction, we evaluate some kind of fitness function which tells us how *good* this new state is. Our choice will then of course be the direction with the highest score::
 

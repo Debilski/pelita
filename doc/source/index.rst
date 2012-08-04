@@ -60,8 +60,8 @@ Contents:
 
    info
    writing_player
-   writing_reflexive_player
    running_player
+   concepts
    development
    user-api
    api
