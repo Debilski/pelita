@@ -2,7 +2,6 @@
 
 from . import (compat,
                containers,
-               datamodel,
                game_master,
                layout,
                player,
