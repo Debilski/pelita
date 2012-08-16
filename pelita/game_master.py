@@ -37,6 +37,8 @@ class GameMaster(object):
         the total permitted number of rounds
     noise : boolean
         should enemy positions be noisy
+    seed : int, optional
+        seed which initialises the internal random number generator
 
     Attributes
     ----------
@@ -51,16 +53,25 @@ class GameMaster(object):
 
     """
     def __init__(self, layout, number_bots, game_time, noise=True, noiser=None,
-                 initial_delay=0.0, max_timeouts=5, timeout_length=3, layout_name=None):
+                 initial_delay=0.0, max_timeouts=5, timeout_length=3, layout_name=None,
+                 seed=None):
         self.universe = datamodel.create_CTFUniverse(layout, number_bots)
         self.number_bots = number_bots
         if noiser is None:
             noiser = ManhattanNoiser
-        self.noiser = noiser(self.universe) if noise else None
+        self.noiser = noiser(self.universe, seed=seed) if noise else None
         self.player_teams = []
         self.player_teams_timeouts = []
         self.viewers = []
         self.initial_delay = initial_delay
+
+        # We seed the internal random number generator.
+        # This instance should be used for all important random decisions
+        # in GameMaster which influence the game itself.
+        # E.g. for forced random moves and most importantly for calculating
+        # the seed which is passed to the clients with set_initial.
+        # Currently, the noiser does not use this rng but has its own.
+        self.rnd = random.Random(seed)
 
         #: The pointer to the current iteration.
         self._step_iter = None
@@ -75,6 +86,7 @@ class GameMaster(object):
             "running_time": 0,
             "finished": False,
             "team_time": [0] * len(self.universe.teams),
+            "times_killed": [0] * len(self.universe.teams),
             "team_wins": None,
             "game_draw": None,
             "game_time": game_time,
@@ -138,7 +150,15 @@ class GameMaster(object):
                 % (len(self.player_teams), len(self.universe.teams)))
 
         for team_id, team in enumerate(self.player_teams):
-            team.set_initial(team_id, self.universe, self.game_state)
+            # What follows is a small hack:
+            # We only send the seed once with the game state
+            # during set_initial. This ensures that no-one
+            # is able to read or guess the seed of the other
+            # party.
+
+            team_seed = self.rnd.randint(0, sys.maxint)
+            team_state = dict({"seed": team_seed}, **self.game_state)
+            team.set_initial(team_id, self.universe, team_state)
 
         for viewer in self.viewers:
             viewer.set_initial(self.universe)
@@ -266,8 +286,8 @@ class GameMaster(object):
             self.game_state["timeout_teams"][bot.team_index] += 1
 
             if self.game_state["timeout_teams"][bot.team_index] == self.game_state["max_timeouts"]:
-                other_team_idx = 1 - bot.team_index
-                self.game_state["team_wins"] = other_team_idx
+                other_team = self.universe.enemy_team(bot.team_index)
+                self.game_state["team_wins"] = other_team.index
                 sys.stderr.write("Timeout #%r for team %r (bot index %r). Team disqualified.\n" % (
                                   self.game_state["timeout_teams"][bot.team_index],
                                   bot.team_index,
@@ -280,14 +300,14 @@ class GameMaster(object):
 
             moves = self.universe.get_legal_moves_or_stop(bot.current_pos).keys()
 
-            move = random.choice(moves)
+            move = self.rnd.choice(moves)
             move_state = self.universe.move_bot(bot.index, move)
             for k,v in move_state.iteritems():
                 self.game_state[k] += v
 
         except PlayerDisconnected:
-            other_team_idx = 1 - bot.team_index
-            self.game_state["team_wins"] = other_team_idx
+            other_team = self.universe.enemy_team(bot.team_index)
+            self.game_state["team_wins"] = other_team.index
 
             sys.stderr.write("Team %r (bot index %r) disconnected. Team disqualified.\n" % (
                               bot.team_index,
@@ -296,6 +316,10 @@ class GameMaster(object):
         for food_eaten in self.game_state["food_eaten"]:
             team_id = self.universe.bots[food_eaten["bot_id"]].team_index
             self.game_state["food_count"][team_id] += 1
+
+        for destroyed in self.game_state["bot_destroyed"]:
+            self.game_state["times_killed"][self.universe.bots[destroyed["bot_id"]].team_index] += 1
+
 
     def prepare_next_round(self):
         """ Increases `game_state["round_index"]`, if possible
@@ -354,7 +378,7 @@ class GameMaster(object):
         winning_team = self.game_state.get("team_wins")
         if winning_team is not None:
             winner = self.universe.teams[winning_team]
-            loser = self.universe.teams[1 - winning_team]
+            loser = self.universe.enemy_team(winning_team)
             msg = "Finished. %r won over %r. (%r:%r)" % (
                     winner.name, loser.name,
                     winner.score, loser.score
@@ -405,13 +429,16 @@ class UniverseNoiser(object):
         the radius for the uniform noise
     sight_distance : int, optional, default: 5
         the distance at which noise is no longer applied.
+    seed : int, optional
+        seed which initialises the internal random number generator
 
     """
 
-    def __init__(self, universe, noise_radius=5, sight_distance=5):
+    def __init__(self, universe, noise_radius=5, sight_distance=5, seed=None):
         self.adjacency = AdjacencyList(universe)
         self.noise_radius = noise_radius
         self.sight_distance = sight_distance
+        self.rnd = random.Random(seed)
 
     def uniform_noise(self, universe, bot_index):
         """ Apply uniform noise to the enemies of a Bot.
@@ -478,7 +505,7 @@ class AStarNoiser(UniverseNoiser):
         possible_positions = list(self.adjacency.pos_within(bot_pos,
                                                             self.noise_radius))
         if len(possible_positions) > 0:
-            return random.choice(possible_positions)
+            return self.rnd.choice(possible_positions)
         else:
             return bot_pos
 
@@ -502,7 +529,7 @@ class ManhattanNoiser(UniverseNoiser):
                               if manhattan_dist((i,j), bot_pos) <= noise_radius]
 
         # shuffle the list of positions
-        random.shuffle(possible_positions)
+        self.rnd.shuffle(possible_positions)
         for pos in possible_positions:
             try:
                 # check that the bot can really fit in here

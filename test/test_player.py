@@ -59,6 +59,21 @@ class TestAbstractPlayer(unittest.TestCase):
         self.assertEqual(universe.teams[1], player_1.team)
         self.assertEqual(universe.teams[1], player_3.team)
 
+        self.assertEqual(universe.teams[1], player_0.enemy_team)
+        self.assertEqual(universe.teams[1], player_2.enemy_team)
+        self.assertEqual(universe.teams[0], player_1.enemy_team)
+        self.assertEqual(universe.teams[0], player_3.enemy_team)
+
+        self.assertEqual(player_0.enemy_food, universe.enemy_food(player_0.team.index))
+        self.assertEqual(player_1.enemy_food, universe.enemy_food(player_1.team.index))
+        self.assertEqual(player_2.enemy_food, universe.enemy_food(player_2.team.index))
+        self.assertEqual(player_3.enemy_food, universe.enemy_food(player_3.team.index))
+
+        self.assertEqual(player_0.team_food, universe.team_food(player_0.team.index))
+        self.assertEqual(player_1.team_food, universe.team_food(player_1.team.index))
+        self.assertEqual(player_2.team_food, universe.team_food(player_2.team.index))
+        self.assertEqual(player_3.team_food, universe.team_food(player_3.team.index))
+
         self.assertEqual({(0, 1): (1, 2), (0, 0): (1, 1)},
                 player_0.legal_moves)
         self.assertEqual({(0, 1): (15, 3), (0, -1): (15, 1), (0, 0): (15, 2),
@@ -178,6 +193,89 @@ class TestRoundBasedPlayer(unittest.TestCase):
         self.assertEqual(gm.universe.bots[1].current_pos, (8, 1))
         self.assertEqual(gm.universe.bots[2].current_pos, (3, 2))
         self.assertEqual(gm.universe.bots[3].current_pos, (9, 2))
+
+class TestSeededRandom_Player(unittest.TestCase):
+    def test_demo_players(self):
+        test_layout = (
+        """ ################
+            #              #
+            #              #
+            #              #
+            #   0      1   #
+            #              #
+            #              #
+            #              #
+            #.            .#
+            ################ """)
+        gm = GameMaster(test_layout, 2, 5, seed=20)
+        gm.register_team(SimpleTeam(SeededRandomPlayer()))
+        gm.register_team(SimpleTeam(SeededRandomPlayer()))
+        self.assertEqual(gm.universe.bots[0].current_pos, (4, 4))
+        self.assertEqual(gm.universe.bots[1].current_pos, (4 + 7, 4))
+        gm.play()
+
+        pos_left_bot = gm.universe.bots[0].current_pos
+        pos_right_bot = gm.universe.bots[1].current_pos
+
+        # running again to test seed:
+        gm = GameMaster(test_layout, 2, 5, seed=20)
+        gm.register_team(SimpleTeam(SeededRandomPlayer()))
+        gm.register_team(SimpleTeam(SeededRandomPlayer()))
+        gm.play()
+        self.assertEqual(gm.universe.bots[0].current_pos, pos_left_bot)
+        self.assertEqual(gm.universe.bots[1].current_pos, pos_right_bot)
+
+        # running again with other seed:
+        gm = GameMaster(test_layout, 2, 5, seed=200)
+        gm.register_team(SimpleTeam(SeededRandomPlayer()))
+        gm.register_team(SimpleTeam(SeededRandomPlayer()))
+        gm.play()
+        # most probably, either the left bot or the right bot or both are at
+        # a different position
+        self.assertTrue(gm.universe.bots[0].current_pos != pos_left_bot
+                     or gm.universe.bots[1].current_pos != pos_right_bot)
+
+    def test_random_seeds(self):
+        test_layout = (
+        """ ################
+            #              #
+            #              #
+            #              #
+            #   0      1   #
+            #   2      3   #
+            #              #
+            #              #
+            #.            .#
+            ################ """)
+        gm1 = GameMaster(test_layout, 4, 5, seed=20)
+        players_a = [SeededRandomPlayer() for _ in range(4)]
+
+        gm1.register_team(SimpleTeam(players_a[0], players_a[2]))
+        gm1.register_team(SimpleTeam(players_a[1], players_a[3]))
+        gm1.set_initial()
+        random_numbers_a = [player.rnd.randint(0, 10000) for player in players_a]
+        # check that each player has a different seed (if randomness allows)
+        self.assertEqual(len(set(random_numbers_a)), 4, "Probably not all player seeds were unique.")
+
+        gm2 = GameMaster(test_layout, 4, 5, seed=20)
+        players_b = [SeededRandomPlayer() for _ in range(4)]
+
+        gm2.register_team(SimpleTeam(players_b[0], players_b[2]))
+        gm2.register_team(SimpleTeam(players_b[1], players_b[3]))
+        gm2.set_initial()
+        random_numbers_b = [player.rnd.randint(0, 10000) for player in players_b]
+        self.assertEqual(random_numbers_a, random_numbers_b)
+
+        gm3 = GameMaster(test_layout, 4, 5, seed=200)
+        players_c = [SeededRandomPlayer() for _ in range(4)]
+
+        gm3.register_team(SimpleTeam(players_c[0], players_c[2]))
+        gm3.register_team(SimpleTeam(players_c[1], players_c[3]))
+        gm3.set_initial()
+        random_numbers_c = [player.rnd.randint(0, 10000) for player in players_c]
+
+        self.assertNotEqual(random_numbers_a, random_numbers_c)
+
 
 class TestNQRandom_Player(unittest.TestCase):
     def test_demo_players(self):

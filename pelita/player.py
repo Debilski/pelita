@@ -93,12 +93,12 @@ class AbstractPlayer(object):
     __metaclass__ =  abc.ABCMeta
 
     def _set_index(self, index):
-        """ Called by SimpleTeam to set this Players index.
+        """ Called by SimpleTeam to set this Player's index.
 
         Parameters
         ----------
         index : int
-            this players index
+            this Player's index
 
         """
         self._index = index
@@ -121,6 +121,13 @@ class AbstractPlayer(object):
         self.universe_states = []
         self._store_universe(universe)
         self.set_initial()
+
+        # we take the bot’s index as a default value for the seed_offset
+        # this ensures that the bots differ in their actions
+        seed_offset = getattr(self, "seed_offset", self._index)
+        self.rnd = random.Random()
+        if game_state.get("seed") is not None:
+            self.rnd.seed(game_state["seed"] + seed_offset)
 
     def set_initial(self):
         """ Subclasses can override this if desired. """
@@ -183,7 +190,7 @@ class AbstractPlayer(object):
 
     @property
     def team(self):
-        """ The Team object this Players Bot is on.
+        """ The Team object this Player's Bot is on.
 
         Returns
         -------
@@ -195,7 +202,7 @@ class AbstractPlayer(object):
 
     @property
     def other_team_bots(self):
-        """ A list of Bots that are on this players team.
+        """ A list of Bots that are on this Player's team.
 
         Returns
         -------
@@ -230,8 +237,20 @@ class AbstractPlayer(object):
         return self.current_uni.team_border(self.me.team_index)
 
     @property
+    def team_food(self):
+        """ Food owned by the team which can be eaten by the enemy Player's bot.
+
+        Returns
+        -------
+        team_food : list of position tuples (int, int)
+            The positions (x, y) of food edible by the enemy
+
+        """
+        return self.current_uni.team_food(self.me.team_index)
+
+    @property
     def enemy_food(self):
-        """ Food owned by the enemy which can be eaten by this players bot.
+        """ Food owned by the enemy which can be eaten by this Player's bot.
 
         Returns
         -------
@@ -251,6 +270,17 @@ class AbstractPlayer(object):
             all Bots on all enemy teams
         """
         return self.current_uni.enemy_bots(self.me.team_index)
+
+    @property
+    def enemy_team(self):
+        """ The enemy Team.
+
+        Returns
+        -------
+        enemy_team : Team object
+            the enemy teams
+        """
+        return self.current_uni.enemy_team(self.me.team_index)
 
     @property
     def current_pos(self):
@@ -325,6 +355,11 @@ class SpeakingPlayer(AbstractPlayer):
         move = random.choice(self.legal_moves.keys())
         self.say("Going %r." % (move,))
         return move
+
+class SeededRandomPlayer(AbstractPlayer):
+    """ A random player which uses the global seed. """
+    def get_move(self):
+        return self.rnd.choice(self.legal_moves.keys())
 
 class TestPlayer(AbstractPlayer):
     """ A Player with predetermined set of moves.

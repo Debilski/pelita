@@ -232,8 +232,8 @@ Layout specification:
   You can restrict this pool by using --filter.
 """
 
-def run_game(*argv):
-    args = parser.parse_args(argv)
+def run_game():
+    args = parser.parse_args()
     if args.help:
         parser.print_help()
         sys.exit(0)
@@ -296,7 +296,8 @@ def run_game(*argv):
                                        bind_addrs=(addrs_left, addrs_right),
                                        initial_delay=initial_delay,
                                        max_timeouts=args.max_timeouts,
-                                       timeout_length=args.timeout_length
+                                       timeout_length=args.timeout_length,
+                                       seed=args.seed
                                        )
 
     player_clients = []
@@ -358,4 +359,4 @@ def run_game(*argv):
 
 
 if __name__ == '__main__':
-    run_game(*sys.argv[1:])
+    run_game()

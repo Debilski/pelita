@@ -38,11 +38,13 @@ Convenience Properties of ``AbstractPlayer``
     team_border
     team_bots
     other_team_bots
+    team_food
 
 .. rubric:: Enemy Properties
 
 .. autosummary::
 
+    enemy_team
     enemy_bots
     enemy_food
 
@@ -112,6 +114,7 @@ Interfacing with the ``CTFUniverse``
     bot_positions
     food_list
     pretty
+    enemy_team
     enemy_bots
     enemy_food
     get_legal_moves
