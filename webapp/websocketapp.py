@@ -28,8 +28,10 @@ class WebSocketApp(object):
             msg = sock.recv()
             msg_objs = json_converter.loads(msg)
 
-            universe = msg_objs.get("universe")
-            game_state = msg_objs.get("game_state")
+            data = msg_objs.get("__data__") or {}
+
+            universe = data.get("universe")
+            game_state = data.get("game_state")
             if universe:
 
                 if not walls:
@@ -68,7 +70,7 @@ class WebSocketApp(object):
                         'state': game_state
                         }
                 data_json = json.dumps(data)
-                #print data_json
+                # print data_json
                 ws.send(data_json)
 
 

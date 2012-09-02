@@ -95,8 +95,8 @@
               $(this).find(".score").text(teams[0].score);
 
               var the_tally = "";
-              for (var idx = 1; idx < (state.kill_count[0] + 1) / 5; idx++) the_tally += "<img class='tally-5'></img>";
-              the_tally += "<img class='tally-" + (state.kill_count[0] % 5) + "'></img>";
+              for (var idx = 1; idx < (state.times_killed[0] + 1) / 5; idx++) the_tally += "<img class='tally-5'></img>";
+              the_tally += "<img class='tally-" + (state.times_killed[0] % 5) + "'></img>";
               $(this).find(".kill_tally").html(the_tally);
             });
             $(".team_1").each(function(idx) {
@@ -104,8 +104,8 @@
               $(this).find(".score").text(teams[1].score);
 
               var the_tally = "";
-              for (var idx = 1; idx < (state.kill_count[1] + 1) / 5; idx++) the_tally += "<img class='tally-5'></img>";
-              the_tally += "<img class='tally-" + (state.kill_count[1] % 5) + "'></img>";
+              for (var idx = 1; idx < (state.times_killed[1] + 1) / 5; idx++) the_tally += "<img class='tally-5'></img>";
+              the_tally += "<img class='tally-" + (state.times_killed[1] % 5) + "'></img>";
               $(this).find(".kill_tally").html(the_tally);
             });
 
