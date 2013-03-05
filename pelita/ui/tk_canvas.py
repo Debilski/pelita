@@ -489,7 +489,7 @@ class TkApplication(object):
             else:
                 self.master.after(2 + self._delay, self.read_queue)
             return
-        except zmq.core.error.ZMQError:
+        except zmq.ZMQError:
             self.observe({})
             if self.controller_socket:
                 self.master.after(2, self.request_next, {})
