@@ -16,7 +16,7 @@ except ImportError:
     from pelita.compat import argparse
 
 # Location
-LOCATION="Kiel"
+LOCATION="Zuerich"
 
 # Speaking external program.
 # Probably not worth it to make it an option.
@@ -192,10 +192,11 @@ def round1(teams):
     print("ROUND 1 (Everybody vs Everybody)")
     print('================================', speak=False)
     print()
-    points = [0 for i in range(len(teams))]
+    number_teams = len(teams_)
+    points = [0 for i in range(number_teams)]
     round1 = []
-    for i in range(5):
-        for j in range(i+1, 5):
+    for i in range(number_teams):
+        for j in range(i+1, number_teams):
             ij = [i, j]
             random.shuffle(ij)
             round1.append(ij)
@@ -335,6 +336,10 @@ TEAMFILE.json must be of the form:
 
     # open the log file (fail if it exists)
     LOGFILE = os.fdopen(os.open(LOGFILE, os.O_CREAT|os.O_EXCL|os.O_WRONLY, 0o0666), 'w')
+
+    with open(args.teams) as teamfile:
+        group_members = json.load(teamfile)
+        RNAMES = dict((repo, "unknown") for repo, members in group_members.items())
 
     teams = RNAMES.keys()
     random.shuffle(teams)
