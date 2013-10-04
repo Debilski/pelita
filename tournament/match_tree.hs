@@ -26,3 +26,6 @@ playNextMatch (Match l@(Match _ _) r) = Match (playNextMatch l) r
 --    getWinner l r = l
 -- runMatches maybeWinner = maybeWinner
 
+main :: IO ()
+main = putStrLn ""
+

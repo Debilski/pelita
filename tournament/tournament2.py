@@ -23,6 +23,16 @@ try:
 except ImportError:
     from pelita.compat import argparse
 
+SETTINGS = {
+    "general": {
+        "LOGFILE": None,
+        "SPEAK": True,
+        "date": None,
+        "location": None
+        },
+    "teams": {},
+    }
+
 LOGFILE = open("loggg", 'w')
 SPEAK = True
 
@@ -96,7 +106,7 @@ class RoundRobin(object):
     def __init__(self, teams):
         self.teams = teams
         self.results = []
-        self.to_play = [(t1, t2) if random.randint(0, 1) else (t2, t1)
+        self.to_play = [(t1, t2) if random.choice([True, False]) else (t2, t1)
                                  for idx1, t1 in enumerate(self.teams)
                                  for idx2, t2 in enumerate(self.teams)
                                  if idx1 < idx2]
@@ -121,7 +131,16 @@ class MatchTree(object):
         self.tree1 = tree1
         self.tree2 = tree2
 
-
+def knock_out_names(number_teams):
+    if number_teams <= 2:
+        return "Final"
+    if number_teams <= 4:
+        return "Semi-finals"
+    if number_teams <= 8:
+        return "Quarter-finals"
+    if number_teams <= 16:
+        return "Eighth-finals"
+    return "Round of %d" % number_teams
 
 class KnockOutRound(object):
     def __init__(self, ranked_teams, number_teams=4, last_chance_match=True):
@@ -138,6 +157,11 @@ class KnockOutRound(object):
 
         if self.last_chance_match:
             do_match(old_winner, self.last_chance_team)
+
+    matches = []
+    for idx in range(len(self.all_teams) // 2):
+        matches += lambda: do_match(self.all_teams[idx], self.all_teams[-idx])
+
 
 def start_logging(filename):
     hdlr = logging.FileHandler(filename, mode='w')
