@@ -260,6 +260,8 @@ class AdjacencyList(dict):
         self._check_pos_exist([initial, target])
         to_visit = []
         seen = []
+        dist_so_far = {}
+        dist_so_far[initial] = 0
         # Since it's A* we use a heap queue to ensure that we always
         # get the next node with to lowest manhattan distance to the
         # current node.
@@ -278,7 +280,11 @@ class AdjacencyList(dict):
             else:
                 seen.append(current)
                 for pos in self[current]:
-                    heapq.heappush(to_visit, Node(value + manhattan_dist(target, pos), (pos), current_node))
+                    new_dist = dist_so_far[current] + 1
+                    if pos not in dist_so_far or new_dist < dist_so_far[pos]:
+                        new_estimate = new_dist + manhattan_dist(target, pos)
+                        dist_so_far[pos] = new_dist
+                        heapq.heappush(to_visit, Node(new_estimate, pos, current_node))
         if not found:
             raise NoPathException("BFS: No path from %r to %r."
                     % (initial, target))

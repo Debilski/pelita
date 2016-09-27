@@ -187,10 +187,12 @@ class TestAdjacencyList(unittest.TestCase):
     def test_a_star(self):
         test_layout = (
         """ ##################
-            #0#.  .  # .     #
-            #2#####    #####1#
-            #     . #  .  .#3#
+            #02.# .  # .  #  #
+            #   ###    ####1 #
+            # ### . #  .  ##3#
+            #                #
             ################## """)
+
         universe = CTFUniverse.create(test_layout, 4)
         al = AdjacencyList(universe.free_positions())
 
@@ -219,6 +221,28 @@ class TestAdjacencyList(unittest.TestCase):
         print(al.a_star(universe.bots[1].current_pos, universe.bots[0].current_pos))
         self.assertEqual(7, len(al.a_star(universe.bots[0].current_pos, universe.bots[1].current_pos)))
         self.assertEqual(7, len(al.a_star(universe.bots[1].current_pos, universe.bots[0].current_pos)))
+
+
+    def test_a_star3(self):
+        test_layout = (
+            """
+            ################################################################
+            #0#                #    #         #                     #   #  #
+            # ######### ######           #              #           ###    #
+            # #            #   ######## ## ## #  #      #           #   #  #
+            #   ############   # # #  #  #         ## ###############      #
+            # #            # ### # #     # ###  ##        #         #### ###
+            # ####### #### #   #   #  #  #       #                         #
+            # #   1      #     ###   ##### ##      ############# ###########
+            # #   #      # #   #   #     # ##    #   #                     #
+            #    ######################### ##    ## ######### ##############"""
+        )
+        universe = CTFUniverse.create(test_layout, 2)
+        al = AdjacencyList(universe.free_positions())
+        #Test distance to middle from both sides
+        self.assertEqual(15, len(al.a_star(universe.bots[0].current_pos, universe.bots[1].current_pos)))
+        self.assertEqual(15, len(al.a_star(universe.bots[1].current_pos, universe.bots[0].current_pos)))
+
 
     def test_a_star_left_right(self):
         def len_of_shortest_path(layout):
