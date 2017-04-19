@@ -38,3 +38,9 @@ after_success:
   - codecov
   - coveralls
   - ./deploy-gh-pages.sh
+  - bash <(curl -s https://codecov.io/bash)
+  
+
+
+
+
