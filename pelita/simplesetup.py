@@ -521,10 +521,14 @@ class SimpleClient:
         """ Waits for incoming requests and tries to get a proper
         answer from the player.
         """
-        compressed = self.socket.recv()
-        d = LZMADecompressor()
-        json_message = d.decompress(compressed)
-        py_obj = json.loads(json_message)
+        msg = self.socket.recv()
+
+        try:
+            msg = LZMADecompressor().decompress(msg).decode()
+            py_obj = json.loads(msg)
+        except:
+            py_obj = json.loads(msg)
+
         uuid_ = py_obj["__uuid__"]
         action = py_obj["__action__"]
         data = py_obj["__data__"]

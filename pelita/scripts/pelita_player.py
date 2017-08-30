@@ -145,11 +145,13 @@ def with_zmq_router(team, address):
             id_ = sock.recv()
             msg = sock.recv()
             from lzma import LZMADecompressor
+            import json
             try:
                 msg = LZMADecompressor().decompress(msg).decode()
                 msg = json.loads(msg)
             except:
                 msg = json.loads(msg)
+            print(msg)
             if "REQUEST" in msg:
                 pair_sock = ctx.socket(zmq.PAIR)
                 port = pair_sock.bind_to_random_port('tcp://127.0.0.1')
