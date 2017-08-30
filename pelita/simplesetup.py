@@ -26,6 +26,7 @@ re-investigate this decision.
 
 import json
 import logging
+from lzma import LZMACompressor, LZMADecompressor
 import multiprocessing
 import re
 import sys
@@ -154,7 +155,10 @@ class ZMQConnection:
             message_obj = {"__uuid__": msg_uuid, "__action__": action, "__data__": data}
             json_message = json.dumps(message_obj)
             try:
-                self.socket.send_unicode(json_message, flags=zmq.NOBLOCK)
+                c = LZMACompressor()
+                compressed = c.compress(json_message.encode())
+                compressed += c.flush()
+                self.socket.send(compressed, flags=zmq.NOBLOCK)
             except zmq.ZMQError as e:
                 _logger.info("Could not send message. Assume socket is unavailable. %r", e)
                 raise DeadConnection()
@@ -165,7 +169,11 @@ class ZMQConnection:
     def recv(self):
         # return tuple
         # (action, data)
-        json_message = self.socket.recv_unicode()
+        compressed = self.socket.recv() # _unicode()
+        try:
+            json_message = LZMADecompressor().decompress(compressed).decode()
+        except:
+            json_message = compressed
         py_obj = json.loads(json_message)
         #print repr(json_msg)
         msg_uuid = py_obj["__uuid__"]
@@ -513,7 +521,9 @@ class SimpleClient:
         """ Waits for incoming requests and tries to get a proper
         answer from the player.
         """
-        json_message = self.socket.recv_unicode()
+        compressed = self.socket.recv()
+        d = LZMADecompressor()
+        json_message = d.decompress(compressed)
         py_obj = json.loads(json_message)
         uuid_ = py_obj["__uuid__"]
         action = py_obj["__action__"]
