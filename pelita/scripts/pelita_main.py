@@ -133,6 +133,7 @@ parser.add_argument('--replay', #help='Replay a dumped game'
                     #' DUMPFILE (default \'pelita.dump\').',
                     metavar='DUMPFILE', default=argparse.SUPPRESS, nargs='?',
                     help=argparse.SUPPRESS)
+parser.add_argument('--snapshot-dir', help=argparse.SUPPRESS, default=None, nargs='?')
 parser.add_argument('--dry-run', const=True, action='store_const', help=argparse.SUPPRESS)
                     #help='Load players but do not actually play the game.')
 parser.add_argument('--list-layouts', action='store_const', const=True,
@@ -298,10 +299,18 @@ def main():
         config["publish-addr"] = replay_publisher.publisher.socket_addr
         subscribe_sock = replay_publisher.publisher.socket_addr.replace('*', 'localhost')
 
-        viewer = libpelita.run_external_viewer(replay_publisher.publisher.socket_addr,
-                                               controller=None, geometry=None, delay=None, stop_after=None)
-        time.sleep(3)
-        replay_publisher.run()
+        if args.viewer.startswith("tk"):
+            args.viewer = "tk-no-sync"
+
+        with libpelita.channel_setup(publish_to=args.publish_to) as channels:
+            if args.viewer.startswith('tk'):
+                geometry = args.geometry
+                delay = int(1000./args.fps)
+                controller = channels["controller"]
+                publisher = channels["publisher"]
+                viewer = libpelita.run_external_viewer(subscribe_sock, None, geometry=geometry, delay=delay, stop_after=None, snapshot_dir=args.snapshot_dir)
+            time.sleep(3)
+            replay_publisher.run()
     else:
         if args.layout or args.layoutfile:
             layout_name, layout_string = pelita.layout.load_layout(layout_name=args.layout, layout_file=args.layoutfile)
@@ -360,7 +369,7 @@ def main():
                 publisher = channels["publisher"]
                 game_config["publisher"] = publisher
                 viewer = libpelita.run_external_viewer(publisher.socket_addr, controller.socket_addr,
-                                                       geometry=geometry, delay=delay, stop_after=args.stop_after)
+                                                       geometry=geometry, delay=delay, stop_after=args.stop_after, snapshot_dir=None)
                 libpelita.run_game(team_specs=team_specs, game_config=game_config, viewers=viewers, controller=controller)
             else:
                 libpelita.run_game(team_specs=team_specs, game_config=game_config, viewers=viewers)

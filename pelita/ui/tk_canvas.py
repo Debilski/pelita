@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import time
 
 import zmq
@@ -107,7 +108,7 @@ class UI:
 
 class TkApplication:
     def __init__(self, master, controller_address=None,
-                 geometry=None, delay=1, stop_after=None):
+                 geometry=None, delay=1, stop_after=None, snapshot_dir=None):
         self.master = master
         self.master.configure(background="white")
 
@@ -118,6 +119,9 @@ class TkApplication:
             self.controller_socket.connect(controller_address)
         else:
             self.controller_socket = None
+
+        self.snapshot_dir = snapshot_dir
+        self.snapshot_num = 0
 
         self.master.title("Pelita")
 
@@ -704,6 +708,37 @@ class TkApplication:
                 self.master.after(self._delay, self.request_round)
         elif self.running:
             self.master.after(self._delay, self.request_step)
+
+        if self.snapshot_dir and universe:
+            filename = "snapshot-%04i.png" % self.snapshot_num
+            filepath = os.path.join(self.snapshot_dir, filename)
+
+            x0 = self.master.winfo_rootx()
+            y0 = self.master.winfo_rooty()
+            w = self.master.winfo_width()
+            h = self.master.winfo_height()
+            capt = "screencapture -R%i,%i,%i,%i %r" % (x0,y0,w,h,filepath)
+            print(capt)
+            import subprocess
+            subprocess.Popen(['/usr/sbin/screencapture', '-R%i,%i,%i,%i' % (x0, y0, w, h), filepath])
+
+            self.snapshot_num += 1
+
+            if game_state and game_state.get("finished") and self.must_print_game_over:
+                self.must_print_game_over = False
+                def scheduled_screenshot():
+                    filename = "snapshot-%04i.png" % self.snapshot_num
+                    filepath = os.path.join(self.snapshot_dir, filename)
+                    x0 = self.master.winfo_rootx()
+                    y0 = self.master.winfo_rooty()
+                    w = self.master.winfo_width()
+                    h = self.master.winfo_height()
+                    capt = "screencapture -R%i,%i,%i,%i %r" % (x0,y0,w,h,filepath)
+                    print(capt)
+                    os.system(capt)
+
+                    self.snapshot_num += 1
+                self._after(500, scheduled_screenshot)
 
     def on_quit(self):
         """ override for things which must be done when we exit.

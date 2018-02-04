@@ -36,6 +36,7 @@ parser.add_argument('--version', help='show the version number and exit',
 parser.add_argument('--log', help='print debugging log information to'
                                   ' LOGFILE (default \'stderr\')',
                     metavar='LOGFILE', default=argparse.SUPPRESS, nargs='?')
+parser.add_argument('--snapshot-dir', type=str, help='snapshot directory')
 
 def main():
     args = parser.parse_args()
@@ -57,7 +58,8 @@ def main():
         'controller_address': args.controller_address,
         'geometry': args.geometry,
         'delay': args.delay,
-        'stop_after': args.stop_after
+        'stop_after': args.stop_after,
+        'snapshot_dir': args.snapshot_dir
     }
     v = TkViewer(**{k: v for k, v in list(tkargs.items()) if v is not None})
     v.run()

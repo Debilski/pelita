@@ -74,7 +74,7 @@ class TkViewer:
     app : The TkApplication class
 
     """
-    def __init__(self, address, controller_address=None, geometry=None, delay=1, stop_after=None):
+    def __init__(self, address, controller_address=None, geometry=None, delay=1, stop_after=None, snapshot_dir=None):
         self.address = address
         self.controller_address = controller_address
         self.delay = delay
@@ -89,6 +89,10 @@ class TkViewer:
         self.poll.register(self.socket, zmq.POLLIN)
 
         self._delay = 2
+        if snapshot_dir and not os.path.exists(snapshot_dir):
+            os.makedirs(snapshot_dir)
+        self.snapshot_dir = snapshot_dir
+
 
     def run(self):
         try:
@@ -112,7 +116,9 @@ class TkViewer:
                                  controller_address=self.controller_address,
                                  geometry=self.geometry,
                                  delay=self.delay,
-                                 stop_after=self.stop_after)
+                                 stop_after=self.stop_after,
+                                 snapshot_dir=self.snapshot_dir)
+
         # schedule next read
         self.root.after_idle(self.read_queue)
         try:

@@ -401,14 +401,14 @@ def run_game(team_specs, game_config, viewers=None, controller=None):
         return server.game_master.game_state
 
 @contextlib.contextmanager
-def tk_viewer(publish_to=None, geometry=None, delay=None):
+def tk_viewer(publish_to=None, geometry=None, delay=None, snapshot_dir=None):
     if publish_to is None:
         publish_to = "tcp://127.0.0.1:*"
     publisher = SimplePublisher(publish_to)
     controller = SimpleController(None, "tcp://127.0.0.1:*")
 
     viewer = run_external_viewer(publisher.socket_addr, controller.socket_addr,
-                                 geometry=geometry, delay=delay)
+                                 geometry=geometry, delay=delay, snapshot_dir=None)
     yield { "publisher": publisher, "controller": controller }
 
 
@@ -422,7 +422,7 @@ def channel_setup(publish_to=None, reply_to=None):
     yield { "publisher": publisher, "controller": controller }
 
 
-def run_external_viewer(subscribe_sock, controller, geometry, delay, stop_after):
+def run_external_viewer(subscribe_sock, controller, geometry, delay, stop_after, snapshot_dir):
     # Something on OS X prevents Tk from running in a forked process.
     # Therefore we cannot use multiprocessing here. subprocess works, though.
     viewer_args = [ str(subscribe_sock) ]
@@ -434,6 +434,8 @@ def run_external_viewer(subscribe_sock, controller, geometry, delay, stop_after)
         viewer_args += ["--delay", str(delay)]
     if stop_after is not None:
         viewer_args += ["--stop-after", str(stop_after)]
+    if snapshot_dir:
+        viewer_args += ["--snapshot-dir", str(snapshot_dir)]
 
     tkviewer = 'pelita.scripts.pelita_tkviewer'
     external_call = [get_python_process(),
