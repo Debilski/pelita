@@ -82,7 +82,7 @@ def check_team_name(name):
 
 def load_team(spec):
     try:
-        if '/' in spec or spec.endswith('.py') or os.path.exists(spec):
+        if '/' in spec or ':' in spec or spec.endswith('.py') or os.path.exists(spec):
             team = load_factory(spec)()
         else:
             team = create_builtin_team(spec)
