@@ -75,6 +75,7 @@ Contents
    development
    user-api
    api
+   internals
 
 Indices and tables
 ==================
