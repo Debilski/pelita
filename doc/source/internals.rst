@@ -35,32 +35,30 @@ Depending on the channel, there MAY be rules imposed on the order in which these
 Connection Types
 ================
 
+.. code-block:: ascii
 
-Game Master <==> Pelita Clients
--------------------------------
+    Game Master <==> Pelita Clients
+    -------------------------------
 
     PAIR (bind) :: PAIR (connect)
 
 
-Game Master ==> Pelita Viewers
--------------------------------
+    Game Master ==> Pelita Viewers
+    ------------------------------
 
     PUB (bind) :: SUB (connect)
 
 
-Game Master <-- Pelita Controller
----------------------------------
+    Game Master <-- Pelita Controller
+    ---------------------------------
 
     ROUTER (bind) :: DEALER (bind)
 
 
-Game Master <==> Pelita remote <==> Pelita client
--------------------------------------------------
+    Game Master <==> Pelita remote <==> Pelita client
+    -------------------------------------------------
 
     DEALER (connect) :: ROUTER (bind)
-                          ^
-                          |
-                          v
                          PAIR (bind) :: PAIR (connect)
 
 Reply Channel <-- Game Master
