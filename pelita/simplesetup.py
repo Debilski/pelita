@@ -43,6 +43,9 @@ _logger = logging.getLogger("pelita.simplesetup")
 class DeadConnection(Exception):
     """ Raised when the connection has been lost. """
 
+class ConnectionError(Exception):
+    """ Raised when the connection has errored. """
+
 #: The timeout to use during sending
 DEAD_CONNECTION_TIMEOUT = 3.0
 
@@ -166,16 +169,33 @@ class ZMQConnection:
         # return tuple
         # (action, data)
         json_message = self.socket.recv_unicode()
-        py_obj = json.loads(json_message)
+        try:
+            py_obj = json.loads(json_message)
+        except ValueError:
+            _logger.warn('Received non-json message from self. Triggering a timeout.')
+            raise ZMQTimeout()
         #print repr(json_msg)
-        msg_uuid = py_obj["__uuid__"]
-        msg_action = py_obj.get("__action__") or py_obj.get("__return__")
 
-        _logger.debug("<--- %r [%s]", msg_action, msg_uuid)
+        try:
+            msg_error = py_obj['__error__']
+            self.socket.close()
+            raise ConnectionError(msg_error)
+        except KeyError:
+            pass
+
+        try:
+            msg_uuid = py_obj["__uuid__"]
+        except KeyError:
+            _logger.warn('__uuid__ missing in message.')
+            msg_uuid = None
+        
+        msg_return = py_obj.get("__return__")
+
+        _logger.debug("<--- %r [%s]", msg_return, msg_uuid)
 
         if msg_uuid == self.last_uuid:
             self.last_uuid = None
-            return py_obj["__return__"]
+            return msg_return
         else:
             self.last_uuid = None
             raise UnknownMessageId()
@@ -246,7 +266,10 @@ class RemoteTeamPlayer:
             # answer did not arrive in time
             raise PlayerTimeout()
         except DeadConnection:
-            _logger.info("Detected a DeadConnection.")
+            _logger.info("Detected a DeadConnection. Maybe just a slow client. Ignoring in set_initial.")
+        except ConnectionError as e:
+            _logger.info("Detected a ConnectionError: %s", e)
+            return '%%%s%%' % e
 
     def get_move(self, bot_id, universe, game_state):
         try:
@@ -268,6 +291,8 @@ class RemoteTeamPlayer:
         except DeadConnection:
             # if the remote connection is closed
             raise PlayerDisconnected()
+        except ConnectionError:
+            raise
 
     def _exit(self):
         try:
