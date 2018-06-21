@@ -37,3 +37,6 @@ def legal_moves(datadict):
     print(food(datadict))
     print(enemy_food(datadict))
     return [(0, 0)]
+
+def reachable_positions(datadict, starting_positions: List[Position]) -> List[Position]:
+    return []
