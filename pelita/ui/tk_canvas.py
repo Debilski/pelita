@@ -717,28 +717,18 @@ class TkApplication:
             y0 = self.master.winfo_rooty()
             w = self.master.winfo_width()
             h = self.master.winfo_height()
-            capt = "screencapture -R%i,%i,%i,%i %r" % (x0,y0,w,h,filepath)
-            print(capt)
-            import subprocess
-            subprocess.Popen(['/usr/sbin/screencapture', '-R%i,%i,%i,%i' % (x0, y0, w, h), filepath])
+            def capture():
+                capt = "screencapture -R%i,%i,%i,%i %r" % (x0,y0,w,h,filepath)
+                print(capt)
+                import subprocess
+                subprocess.Popen(['/usr/sbin/screencapture', '-R%i,%i,%i,%i' % (x0, y0, w, h), filepath])
+            self.master.after(50, capture)
 
             self.snapshot_num += 1
 
-            if game_state and game_state.get("finished") and self.must_print_game_over:
-                self.must_print_game_over = False
-                def scheduled_screenshot():
-                    filename = "snapshot-%04i.png" % self.snapshot_num
-                    filepath = os.path.join(self.snapshot_dir, filename)
-                    x0 = self.master.winfo_rootx()
-                    y0 = self.master.winfo_rooty()
-                    w = self.master.winfo_width()
-                    h = self.master.winfo_height()
-                    capt = "screencapture -R%i,%i,%i,%i %r" % (x0,y0,w,h,filepath)
-                    print(capt)
-                    os.system(capt)
-
-                    self.snapshot_num += 1
-                self._after(500, scheduled_screenshot)
+            if game_state and game_state.get("finished"):
+                print("finished")
+#                self.quit
 
     def on_quit(self):
         """ override for things which must be done when we exit.

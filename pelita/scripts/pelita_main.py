@@ -29,6 +29,7 @@ class ReplayPublisher:
             if state:
                 message = json.loads(state)
                 self.publisher._send(message)
+                time.sleep(0.25)
 
 class ResultPrinter(pelita.viewer.AbstractViewer):
     def observe(self, universe, game_state):
