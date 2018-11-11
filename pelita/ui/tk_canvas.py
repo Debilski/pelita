@@ -1,5 +1,6 @@
 import json
 import logging
+from pathlib import Path
 import time
 
 import zmq
@@ -17,6 +18,17 @@ _logger = logging.getLogger(__name__)
 def _ensure_tuples(list):
     """ Ensures that an iterable is a list of position tuples. """
     return [tuple(item) for item in list]
+
+NINJA_TEMPLATE = r"""
+rule convert
+  command = convert -alpha off -density 800 -resize 25% -format png $in -append $out
+
+rule ffmpeg
+  command = ffmpeg -y -framerate 10 -i snap-%04d.png -start_number 2 -s:v 1424x778 -c:v libx264 -profile:v high -crf 20 -pix_fmt yuv420p $out
+
+build movie.mp4: ffmpeg {pngs}
+{converts}
+"""
 
 
 def guess_size(display_string, bounding_width, bounding_height, rel_size=0):
@@ -123,7 +135,7 @@ class UI:
 
 class TkApplication:
     def __init__(self, master, controller_address=None,
-                 geometry=None, delay=1, stop_after=None):
+                 geometry=None, delay=1, stop_after=None, snapshot_folder=None):
         self.master = master
         self.master.configure(background="white")
 
@@ -169,6 +181,21 @@ class TkApplication:
 
         self.ui.status_canvas = tkinter.Frame(master, height=25)
         self.ui.status_canvas.config(background="white")
+
+        if snapshot_folder:
+            self.snapshot_mode = True
+            self.snapshot_folder = Path(snapshot_folder)
+            try:
+                self.snapshot_folder.mkdir()
+            except FileExistsError:
+                pass
+                #self.quit()
+                #raise RuntimeError("Folder ‘{}’ already exists. Exiting.".format(snapshot_folder)) from None
+            self.snapshot_count = 0
+        else:
+            self.snapshot_mode = False
+            self.snapshot_folder = None
+            self.snapshot_count = 0
 
         self.ui.game_canvas = tkinter.Canvas(master)
         self.ui.game_canvas.config(background="white", bd=0, highlightthickness=0, relief='ridge')
@@ -328,6 +355,8 @@ class TkApplication:
         if self.controller_socket:
             self.master.after_idle(self.request_initial)
 
+        if self.snapshot_mode:
+            self.ui.status_canvas.pack_forget()
 
     def init_mesh(self, game_state):
         width = max(game_state['walls'])[0] + 1
@@ -385,6 +414,15 @@ class TkApplication:
         self.mesh_graph.screen_width = self.ui.game_canvas.winfo_width()
         self.mesh_graph.screen_height = self.ui.game_canvas.winfo_height()
 
+        if self.snapshot_mode:
+            # Ideal scaling should be 24
+            self.mesh_graph.num_x = max(game_state['walls'])[0] + 1
+            self.mesh_graph.num_y = max(game_state['walls'])[1] + 1
+
+            width = self.mesh_graph.num_x * 24
+            height = self.mesh_graph.num_y * 24 + self.ui.header_canvas.winfo_height()
+            self.master.geometry('{width}x{height}'.format(width=width, height=height))
+
         if self.mesh_graph.screen_width < 600:
             if self._default_font.cget('size') != 8:
                 self._default_font.configure(size=8)
@@ -427,6 +465,23 @@ class TkApplication:
         self.draw_bots(game_state)
 
         self.draw_status_info(game_state)
+
+        if self.snapshot_mode:
+            # we need to ensure that the geometry is correct before taking a snapshot
+            if (not self.mesh_graph.num_x * 24 == self.ui.game_canvas.winfo_width() and
+                not self.mesh_graph.num_x * 24 == self.ui.game_canvas.winfo_height()):
+                self.master.after_idle(self.update)
+                return
+
+            header = self.snapshot_folder / 'snap-{:04}.header.ps'.format(self.snapshot_count)
+            canvas = self.snapshot_folder / 'snap-{:04}.canvas.ps'.format(self.snapshot_count)
+            state = self.snapshot_folder / 'snap-{:04}.state.json'.format(self.snapshot_count)
+            ninja = self.snapshot_folder / 'build.ninja'
+            canvas.write_text(self.ui.game_canvas.postscript(colormode='color'))
+            header.write_text(self.ui.header_canvas.postscript(colormode='color'))
+            state.write_text(json.dumps(game_state))
+            self.snapshot_count += 1
+
 
     def draw_grid(self):
         """ Draws a light grid on the background.
@@ -784,6 +839,17 @@ class TkApplication:
         """ override for things which must be done when we exit.
         """
         self.running = False
+
+        if self.snapshot_mode:
+            snap_ids =  ['{:04}'.format(snap_id) for snap_id in range(self.snapshot_count)]
+            headers = map('snap-{}.header.ps'.format, snap_ids)
+            canvas = map('snap-{}.canvas.ps'.format, snap_ids)
+            pngs = list(map('snap-{}.png'.format, snap_ids))
+            ninja = self.snapshot_folder / 'build.ninja'
+            converts = "\n".join(map(lambda phc: "build {}: convert {} {}".format(*phc), zip(pngs, headers, canvas)))
+            ninja_str = NINJA_TEMPLATE.format(pngs=" ".join(pngs), converts=converts)
+            ninja.write_text(ninja_str)
+
         if self.controller_socket:
             _logger.debug('---> exit')
             self.controller_socket.send_json({"__action__": "exit"})

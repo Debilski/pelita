@@ -62,6 +62,8 @@ parser.add_argument('--replay', help=long_help('Replay a dumped game'),
                     metavar='REPLAYFILE', dest='replayfile', const='pelita.dump', nargs='?')
 parser.add_argument('--store-output', help=long_help('Write all player’s stdout/stderr to the given folder (must exist)'),
                     metavar='FOLDER')
+parser.add_argument('--snapshot-folder', help=long_help('Store thw replay in this folder'),
+                    metavar='FOLDER', dest='snapshot_folder')
 parser.add_argument('--list-layouts', action='store_true',
                     help='List all available built-in layouts.')
 parser.add_argument('--check-team', action="store_true",
@@ -205,7 +207,8 @@ def main():
     viewer_options = {
         "geometry": geometry,
         "delay": delay,
-        "stop_at": stop_at
+        "stop_at": stop_at,
+        "snapshot_folder": args.snapshot_folder,
     }
 
     if args.reply_to:
