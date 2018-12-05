@@ -179,12 +179,10 @@ class TestStoppingTeam:
     def round_counting():
         storage_copy = {}
         def inner(bot, state):
-            print(state)
             if state is None:
                 state = {}
             state[bot.turn] = state.get(bot.turn, 0) + 1
             storage_copy['rounds'] = state[bot.turn]
-            print(state)
             return (0, 0), state
         inner._storage = storage_copy
         return inner
@@ -214,7 +212,6 @@ class TestStoppingTeam:
         ]
         gm = GameMaster(test_layout, team, 4, 3)
         gm.play()
-        print(gm.universe.pretty)
         assert gm.universe.bots[0].current_pos == (1, 1)
         assert gm.universe.bots[1].current_pos == (10, 1)
         assert round_counting._storage['rounds'] == 3
@@ -301,4 +298,41 @@ class TestTrack:
             Team(trackingBot)
         ]
         gm = GameMaster(layout, team, 4, 300)
+        gm.play()
+
+    def test_eaten(self):
+        def trackingBot(bot, state):
+            if bot.turn == 0:
+                # this bot moves four steps to the right where it will be eaten
+                if bot.round == 4:
+                    assert bot.eaten
+                    assert not bot.other.eaten
+                else:
+                    assert not bot.eaten
+                    assert not bot.other.eaten
+                return (1, 0), state
+
+            elif bot.turn == 1:
+                # in round 3, our other bot will already have moved
+                # and we confirm that it has been eaten
+                if bot.round == 3:
+                    assert not bot.eaten
+                    assert bot.other.eaten
+                else:
+                    assert not bot.eaten
+                    assert not bot.other.eaten
+                return stopping(bot, state)
+
+        layout = """
+        ############
+        ##02  3.  1#
+        ############
+        #.#      #.#
+        ############
+        """
+        team = [
+            Team(trackingBot),
+            Team(stopping)
+        ]
+        gm = GameMaster(layout, team, 4, 6)
         gm.play()
