@@ -62,16 +62,16 @@ class GameMaster:
     def __init__(self, layout, teams, number_bots, game_time, noise=True, noiser=None,
                  max_timeouts=5, timeout_length=3, layout_name=None,
                  seed=None):
-        self.universe = datamodel.CTFUniverse.create(layout, number_bots)
+        universe = datamodel.CTFUniverse.create(layout, number_bots)
         self.number_bots = number_bots
 
-        if not len(teams) == len(self.universe.teams):
+        if not len(teams) == len(universe.teams):
             raise ValueError("Number of registered teams does not match the universe.")
         self.player_teams = teams
 
         if noiser is None:
             noiser = ManhattanNoiser
-        self.noiser = noiser(self.universe, seed=seed) if noise else None
+        self.noiser = noiser(universe, seed=seed) if noise else None
 
         self.viewers = []
 
@@ -90,6 +90,24 @@ class GameMaster:
             #: game uuid
             "game_uuid": str(uuid.uuid4()),
 
+            #: walls
+            "walls": [pos for pos, is_wall in universe.maze.items() if is_wall],
+
+            #: score
+            "team_score": [t.score for t in universe.teams],
+
+            #: food
+            "food": list(universe.food),
+
+            #: bot_positions
+            "bot_positions": [b.current_pos for b in universe.bots],
+
+            #: initial_positions
+            "initial_postitions": [b.initial_pos for b in universe.bots],
+
+            #: homezones
+            "team_homezone": [t.zone for t in universe.teams],
+
             #: holds a list of bot movements for this step
             #: [{"bot_id": bot_id, "old_pos": old_pos, "new_pos": new_pos}]
             "bot_moved": [],
@@ -103,7 +121,7 @@ class GameMaster:
             "bot_destroyed": [],
 
             #: [timeouts_team_0, timeouts_team_1]
-            "timeout_teams": [0] * len(self.universe.teams),
+            "timeout_teams": [0] * len(universe.teams),
 
             #: bot.index of the bot which is about to move or None
             "bot_id": None,
@@ -118,13 +136,13 @@ class GameMaster:
             "finished": False,
 
             #: [team_name_0, team_name_1]
-            "team_name": [""] * len(self.universe.teams),
+            "team_name": [""] * len(universe.teams),
 
             #: [running_time_team_0, running_time_team_1]
-            "team_time": [0] * len(self.universe.teams),
+            "team_time": [0] * len(universe.teams),
 
             #: [times_killed_team_0, times_killed_team_1]
-            "times_killed": [0] * len(self.universe.teams),
+            "times_killed": [0] * len(universe.teams),
 
             #: team.index of the team winning or None
             "team_wins": None,
@@ -136,16 +154,16 @@ class GameMaster:
             "bot_error": {},
 
             #: [reason_team_0, reason_team_1] for a team which was disqualified
-            "teams_disqualified": [None] * len(self.universe.teams),
+            "teams_disqualified": [None] * len(universe.teams),
 
             #: maximum number of rounds
             "game_time": game_time,
 
             #: [food_eaten_team_0, food_eaten_team_1]
-            "food_count": [0] * len(self.universe.teams),
+            "food_count": [0] * len(universe.teams),
 
             #: [food_to_eat_team_0, food_to_eat_team_1]
-            "food_to_eat": [len(self.universe.enemy_food(team.index)) for team in self.universe.teams],
+            "food_to_eat": [len(universe.enemy_food(team.index)) for team in universe.teams],
 
             #: time until timeout
             "timeout_length": timeout_length,
@@ -202,13 +220,13 @@ class GameMaster:
         It notifies the PlayerTeams and the Viewers of the initial
         universes and tells the PlayerTeams what team_id they have.
         """
-        if len(self.player_teams) != len(self.universe.teams):
+        if len(self.player_teams) != len(self.game_state['team_score']):
             raise IndexError(
                 "Universe uses %i teams, but %i are registered."
-                % (len(self.player_teams), len(self.universe.teams)))
+                % (len(self.player_teams), len(self.game_state['team_score'])))
 
         for viewer in self.viewers:
-            viewer.set_initial(self.universe, self.game_state)
+            viewer.set_initial(self.game_state)
 
         for team_id, team in enumerate(self.player_teams):
             # What follows is a small hack:
@@ -220,7 +238,7 @@ class GameMaster:
             team_seed = self.rnd.randint(0, sys.maxsize)
             team_state = dict({"seed": team_seed}, **self.game_state)
             try:
-                team_name = team.set_initial(team_id, self.universe, team_state)
+                team_name = team.set_initial(team_id, team_state)
                 self.game_state["team_name"][team_id] = team_name
             except PlayerTimeout:
                 pass

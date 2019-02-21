@@ -266,10 +266,9 @@ class RemoteTeamPlayer:
             _logger.info("Detected a DeadConnection, returning a string nonetheless.")
             return "%error%"
 
-    def set_initial(self, team_id, universe, game_state):
+    def set_initial(self, team_id, game_state):
         try:
             self.zmqconnection.send("set_initial", {"team_id": team_id,
-                                                    "universe": universe._to_json_dict(),
                                                     "game_state": game_state})
             return self.zmqconnection.recv_timeout(game_state["timeout_length"])
         except ZMQReplyTimeout:
@@ -281,10 +280,9 @@ class RemoteTeamPlayer:
             _logger.info("Detected a ConnectionError: %s", e)
             return '%%%s%%' % e
 
-    def get_move(self, bot_id, universe, game_state):
+    def get_move(self, bot_id, game_state):
         try:
             self.zmqconnection.send("get_move", {"bot_id": bot_id,
-                                                 "universe": universe._to_json_dict(),
                                                  "game_state": game_state})
             reply = self.zmqconnection.recv_timeout(game_state["timeout_length"])
             # make sure it is a dict

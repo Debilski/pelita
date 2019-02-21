@@ -272,6 +272,15 @@ class IllegalMoveException(Exception):
     """ Raised when a bot attempts to make an illegal move. """
     pass
 
+
+# @dataclass Team:
+#class Team:
+#    def __init__(self):
+#        self.positions = []
+#        self.score
+
+# @dataclass
+
 class CTFUniverse:
     """ The Universe: representation of the game state.
 
@@ -758,3 +767,14 @@ class CTFUniverse:
                    food=item["food"],
                    teams=[Team._from_json_dict(team) for team in item["teams"]],
                    bots=[Bot._from_json_dict(bot) for bot in item["bots"]])
+
+class Universe:
+    def __init__(self):
+        self.maze
+        self.food
+        self.teams = [{}, {}]
+
+
+
+#Universe -> prepare_for_bot (apply noise) -> (Bot)
+#Universe -> apply_move_from_bot -> (Universe, error)
