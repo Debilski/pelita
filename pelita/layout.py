@@ -268,6 +268,16 @@ def layout_as_str(*, walls, food=None, bots=None):
     The first layout string contains walls and food, the subsequent layout
     strings contain walls and bots. If bots are overlapping, as many layout
     strings are appended as there are overlapping bots.
+    """
+    return "".join(layout_as_strlist(walls=walls, food=food, bots=bots))
+
+
+def layout_as_strlist(*, walls, food=None, bots=None):
+    """Given walls, food and bots return a list of string layout representations
+
+    The first layout string contains walls and food, the subsequent layout
+    strings contain walls and bots. If bots are overlapping, as many layout
+    strings are appended as there are overlapping bots.
 
     Example:
 
@@ -296,6 +306,7 @@ def layout_as_str(*, walls, food=None, bots=None):
         need_combined = any(coord in food for coord in bots)
     # then, check that bots are not overlapping with food
 
+    combined_layouts = []
     out = io.StringIO()
     for y in range(height):
         for x in range(width):
@@ -318,9 +329,11 @@ def layout_as_str(*, walls, food=None, bots=None):
         # close the row
         out.write('\n')
 
+    combined_layouts.append(out.getvalue())
+
     # return here if we don't need a combined layout string
     if not need_combined:
-        return out.getvalue()
+        return combined_layouts
 
     # create a mapping coordinate : list of bots at this coordinate
     coord_bots = {}
@@ -335,6 +348,7 @@ def layout_as_str(*, walls, food=None, bots=None):
 
     # loop through the bot coordinates
     while coord_bots:
+        out = io.StringIO()
         for y in range(height):
             for x in range(width):
                 # let's repeat the walls
@@ -354,8 +368,9 @@ def layout_as_str(*, walls, food=None, bots=None):
                     out.write(' ')
             # close the row
             out.write('\n')
+        combined_layouts.append(out.getvalue())
 
-    return out.getvalue()
+    return combined_layouts
 
 
 
