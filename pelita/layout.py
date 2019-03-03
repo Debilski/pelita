@@ -260,6 +260,24 @@ def parse_single_layout(layout_str):
     food.sort()
     return {'walls':walls, 'food':food, 'bots':bots}
 
+
+def layout_as_cols(*, walls, food=None, bots=None):
+    """Given walls, food and bots return a string layout representation
+
+    Returns a combined layout string.
+
+    The first layout string contains walls and food, the subsequent layout
+    strings contain walls and bots. If bots are overlapping, as many layout
+    strings are appended as there are overlapping bots.
+    """
+    layouts = layout_as_strlist(walls=walls, food=food, bots=bots)
+    
+    out = io.StringIO()
+    for lines in zip(*[l.splitlines() for l in layouts]):
+        print(*lines, file=out)
+        
+    return out.getvalue()
+
 def layout_as_str(*, walls, food=None, bots=None):
     """Given walls, food and bots return a string layout representation
 
