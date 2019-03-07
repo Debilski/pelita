@@ -307,6 +307,53 @@ def layout_as_strlist(*, walls, food=None, bots=None):
     width = max(walls)[0] + 1
     height = max(walls)[1] + 1
 
+    def wallchar(walls, pos):
+        chars = {
+            'BL':'┐',
+            'BR':'┌',
+            'BRT':'├',
+            'BLR':'┬',
+            'BLRT':'┼',
+            'RT':'└',
+            'BLT':'┤',
+            'LRT':'┴',
+            'LR':'─',
+            'LT':'┘',
+            'BT':'│',
+            'L':'╴',
+            'T':'╵',
+            'R':'╶',
+            'B':'╷',
+            '': '▫'
+        }
+        chars = {
+            'BL':'╗',
+            'BR':'╔',
+            'BRT':'╠',
+            'BLR':'╦',
+            'BLRT':'╬',
+            'RT':'╚',
+            'BLT':'╣',
+            'LRT':'╩',
+            'LR':'═',
+            'LT':'╝',
+            'BT':'║',
+            'L':'═',
+            'T':'║',
+            'R':'═',
+            'B':'║',
+            '': '╬'
+        }
+
+        shifts = {
+            (0, 1): 'B',
+            (0, -1): 'T',
+            (-1, 0): 'L',
+            (1, 0): 'R'
+        }
+        return chars[''.join(sorted([name for shift, name in shifts.items() if pos in walls and (pos[0] + shift[0], pos[1] + shift[1]) in walls]))]
+
+
 
     # flag to check if we have overlapping objects
 
@@ -330,7 +377,8 @@ def layout_as_strlist(*, walls, food=None, bots=None):
         for x in range(width):
             if (x, y) in walls:
                 # always print walls
-                out.write('#')
+                chr = wallchar(walls, (x, y))
+                out.write(chr)
             elif (x, y) in food:
                 # always print food
                 out.write('.')
