@@ -112,6 +112,7 @@ def run_game(team_specs, *, rounds, layout_dict, layout_name="", seed=None, dump
 
     while not state.get('gameover'):
         state = play_turn(state)
+        print(state)
 
         # generate the reduced viewer state
         viewer_state = prepare_viewer_state(state)
@@ -182,7 +183,9 @@ def make_team(team_spec, zmq_context=None):
             from .simplesetup import RemoteTeamPlayer
             from .libpelita import call_pelita_player
             team_player = RemoteTeamPlayer(socket)
-            call_pelita_player(team_spec, f"tcp://localhost:{port}")
+            p = call_pelita_player(team_spec, f"tcp://localhost:{port}")
+            team_player._proc = p
+            team_player.__del__ = lambda self: self._proc.terminate()
 
     return team_player, zmq_context
 

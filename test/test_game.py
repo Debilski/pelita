@@ -380,7 +380,7 @@ def test_minimal_remote_game():
 
     layout_name, layout_string = layout.get_random_layout()
     l = layout.parse_layout(layout_string)
-    final_state = run_game(["../pelita_template/demo_stopping.py", move], rounds=20, layout_dict=l)
+    final_state = run_game(["../pelita_template/demo01_stopping.py", move], rounds=20, layout_dict=l)
     assert final_state['gameover'] is True
     assert final_state['score'] == [0, 0]
     assert final_state['round'] == 19
