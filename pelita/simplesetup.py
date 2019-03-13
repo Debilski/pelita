@@ -252,8 +252,9 @@ class RemoteTeamPlayer:
     socket : zmq socket
         The zmq socket of this connection
     """
-    def __init__(self, socket):
+    def __init__(self, socket, timeout_length=3):
         self.zmqconnection = ZMQConnection(socket)
+        self.timeout_length = timeout_length
 
     def team_name(self):
         try:
@@ -270,7 +271,7 @@ class RemoteTeamPlayer:
         try:
             self.zmqconnection.send("set_initial", {"team_id": team_id,
                                                     "game_state": game_state})
-            return self.zmqconnection.recv_timeout(game_state["timeout_length"])
+            return self.zmqconnection.recv_timeout(self.timeout_length)
         except ZMQReplyTimeout:
             # answer did not arrive in time
             raise PlayerTimeout()
@@ -280,11 +281,10 @@ class RemoteTeamPlayer:
             _logger.info("Detected a ConnectionError: %s", e)
             return '%%%s%%' % e
 
-    def get_move(self, bot_id, game_state):
+    def get_move(self, game_state, timeout_length=None):
         try:
-            self.zmqconnection.send("get_move", {"bot_id": bot_id,
-                                                 "game_state": game_state})
-            reply = self.zmqconnection.recv_timeout(game_state["timeout_length"])
+            self.zmqconnection.send("get_move", {"game_state": game_state})
+            reply = self.zmqconnection.recv_timeout(self.timeout_length)
             # make sure it is a dict
             reply = dict(reply)
             # make sure that the move is a tuple
@@ -587,8 +587,8 @@ class SimpleClient:
     def set_initial(self, team_id, game_state):
         return self.team.set_initial(team_id, game_state)
 
-    def get_move(self, bot_id, game_state):
-        return self.team.get_move(bot_id, game_state)
+    def get_move(self, game_state):
+        return self.team.get_move(game_state)
 
     def exit(self):
         raise ExitLoop()

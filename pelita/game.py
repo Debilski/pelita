@@ -147,16 +147,44 @@ def setup_game(team_specs, layout_dict, max_rounds=300, seed=None):
     )
     game_state = dataclasses.asdict(game_state)
 
-    # for now team_specs will be two move functions
+    # we start with a dummy zmq_context
+    # make_team will generate and return a new context, if it is needed
+    zmq_context = None
+    
     game_state['team_specs'] = []
-    for idx, team in enumerate(team_specs):
-        # wrap the move function in a Team
-        from .player.team import Team as _Team
-        team_player = _Team('local-team', team)
-        team_name = team_player.set_initial(idx, prepare_bot_state(game_state, idx))
-        game_state['team_specs'].append(team_player)
+    for idx, team_spec in enumerate(team_specs):
+        team, zmq_context = make_team(team_spec)
+        team_name = team.set_initial(idx, prepare_bot_state(game_state, idx))
+        game_state['team_specs'].append(team)
 
     return game_state
+
+def make_team(team_spec, zmq_context=None):
+    """ Creates a Team object for the given team_spec.
+    """
+    if callable(team_spec):
+        # wrap the move function in a Team
+        from .player.team import Team as _Team
+        team_player = _Team('local-team', team_spec)
+        bound_to = None
+    elif isinstance(team_spec, str):
+        if team_spec.startswith('tcp://'):
+            # remote team TODO
+            pass
+        else:
+            # start pelita-player
+            if not zmq_context:
+                import zmq
+                zmq_context = zmq.Context()
+            socket = zmq_context.socket(zmq.PAIR)
+            port = socket.bind_to_random_port('tcp://*')
+            bound_to = {'socket': socket, 'address': f"tcp://localhost:{port}"}
+            from .simplesetup import RemoteTeamPlayer
+            from .libpelita import call_pelita_player
+            team_player = RemoteTeamPlayer(socket)
+            call_pelita_player(team_spec, f"tcp://localhost:{port}")
+
+    return team_player, zmq_context
 
 def request_new_position(game_state):
     team = game_state['turn'] % 2

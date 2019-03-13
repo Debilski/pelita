@@ -148,19 +148,7 @@ def call_pelita_player(module_spec, address, color='', dump=None):
     the same start script (pelitagame) and runs `team_spec`
     as a standalone client on URL `addr`.
     """
-    defined_runners = {
-        "py": DefaultRunner,
-        "bin": BinRunner,
-    }
-
-    if module_spec.prefix is not None:
-        try:
-            runner = defined_runners[module_spec.prefix]
-        except KeyError:
-            raise ValueError("Unknown runner: {}:".format(module_spec.prefix))
-    else:
-        runner = DefaultRunner
-    runner_inst = runner(module_spec.module)
+    runner_inst = DefaultRunner(module_spec)
     runner_inst.color = color
     call_args = runner_inst.call_args(address)
     _logger.debug("Executing: %r", call_args)
