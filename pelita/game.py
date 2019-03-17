@@ -126,7 +126,7 @@ def run_game(team_specs, *, rounds, layout_dict, layout_name="", seed=None, dump
 
     while not state.get('gameover'):
         state = play_turn(state)
-        print(state)
+        print(GameState(**state).pretty_str())
 
         # generate the reduced viewer state
         viewer_state = prepare_viewer_state(state)
