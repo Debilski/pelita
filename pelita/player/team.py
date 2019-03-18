@@ -2,10 +2,17 @@
 import collections
 from functools import reduce
 from io import StringIO
+import logging
 import random
 
+import zmq
+
 from . import AbstractTeam
-from .. import datamodel
+from ..libpelita import call_pelita_player
+from ..simplesetup import ZMQConnection, ZMQConnectionError, ZMQReplyTimeout, ZMQUnreachablePeer, DEAD_CONNECTION_TIMEOUT
+
+
+_logger = logging.getLogger(__name__)
 
 
 class Team(AbstractTeam):
@@ -117,6 +124,145 @@ class Team(AbstractTeam):
 
     def __repr__(self):
         return "Team(%r, %s)" % (self.team_name, repr(self._team_move))
+
+
+class RemoteTeam:
+    """ Start a child process with the given `team_spec` and handle
+    communication with it through a zmq.PAIR connection.
+
+    It also does some basic checks for correct return values and tries to
+    terminate the child process once it is not needed anymore.
+
+    Parameters
+    ----------
+    zmq_context
+        A zmq_context (if None, a new one will be created)
+    team_spec
+        The string to pass as a command line argument to pelita_player
+    address
+        The zmq address (an address will be chosen randomly, if empty)
+    """
+    def __init__(self, team_spec, team_name=None, address="tcp://", zmq_context=None, timeout_length=3):
+        if zmq_context is None:
+            zmq_context = zmq.Context()
+        socket = zmq_context.socket(zmq.PAIR)
+        port = socket.bind_to_random_port('tcp://*')
+        self._team_spec = team_spec
+        self._team_name = team_name
+        self.bound_to_address =f"tcp://localhost:{port}"
+        self.zmqconnection = ZMQConnection(socket)
+        self.timeout_length = timeout_length
+        self.proc = call_pelita_player(team_spec, self.bound_to_address)
+
+    # TODO
+#   def team_name(self):
+#       try:
+#           self.zmqconnection.send("team_name", {})
+#           return self.zmqconnection.recv_timeout(DEAD_CONNECTION_TIMEOUT)
+#       except ZMQReplyTimeout:
+#           _logger.info("Detected a timeout, returning a string nonetheless.")
+#           return "%error%"
+#       except ZMQUnreachablePeer:
+#           _logger.info("Detected a DeadConnection, returning a string nonetheless.")
+#           return "%error%"
+
+    def set_initial(self, team_id, game_state):
+        try:
+            self.zmqconnection.send("set_initial", {"team_id": team_id,
+                                                    "game_state": game_state})
+            team_name = self.zmqconnection.recv_timeout(self.timeout_length)
+            if team_name:
+                self._team_name = team_name
+            return team_name
+        except ZMQReplyTimeout:
+            # answer did not arrive in time
+            raise PlayerTimeout()
+        except ZMQUnreachablePeer:
+            _logger.info("Could not properly send the message. Maybe just a slow client. Ignoring in set_initial.")
+        except ZMQConnectionError as e:
+            _logger.info("Detected a ConnectionError: %s", e)
+            return '%%%s%%' % e
+
+    def get_move(self, game_state, timeout_length=None):
+        try:
+            self.zmqconnection.send("get_move", {"game_state": game_state})
+            reply = self.zmqconnection.recv_timeout(self.timeout_length)
+            # make sure it is a dict
+            reply = dict(reply)
+            # make sure that the move is a tuple
+            reply["move"] = tuple(reply.get("move"))
+            return reply
+        except ZMQReplyTimeout:
+            # answer did not arrive in time
+            raise PlayerTimeout()
+        except TypeError:
+            # if we could not convert into a tuple or dict (e.g. bad reply)
+            return None
+        except ZMQUnreachablePeer:
+            # if the remote connection is closed
+            raise PlayerDisconnected()
+        except ZMQConnectionError:
+            raise
+
+    def _exit(self):
+        try:
+            self.zmqconnection.send("exit", {}, timeout=1)
+        except ZMQUnreachablePeer:
+            _logger.info("Remote Player %r is already dead during exit. Ignoring.", self)
+
+    def __del__(self):
+        self._exit()
+        self.proc[0].terminate()
+
+    def __repr__(self):
+        team_name = f" ({self._team_name})" if self._team_name else ""
+        return f"RemoteTeam<{self._team_spec}{team_name} on {self.bound_to_address}>" 
+
+
+def make_team(team_spec, team_name=None, zmq_context=None):
+    """ Creates a Team object for the given team_spec.
+
+    If no zmq_context is passed for a remote team, then a new context
+    will be automatically created and returned. Otherwise, the same
+    zmq_context (or None) will be returned.
+
+    Parameters
+    ----------
+    team_spec : callable or str
+        A move function or a team_spec that is passed on to pelita_player
+
+    team_name : str, optional
+        Optional team name for a local team
+
+    zmq_context : zmq context, optional
+        ZMQ context to avoid having to create a new context for every team
+
+    Returns
+    -------
+    team_player, zmq_context : tuple
+        The team class to interact with
+        The new ZMQ context
+
+    """
+    if callable(team_spec):
+        _logger.debug("Making a local team for %s", team_spec)
+        # wrap the move function in a Team
+        if team_name is None:
+            team_name = 'local-team'
+        team_player = Team(team_name, team_spec)
+    elif isinstance(team_spec, str):
+        _logger.debug("Making a remote team for %s", team_spec)
+        # wrap the move function in a Team
+        if team_spec.startswith('tcp://'):
+            # remote team TODO
+            pass
+        else:
+            # start pelita-player
+            if not zmq_context:
+                zmq_context = zmq.Context()
+            team_player = RemoteTeam(team_spec=team_spec, zmq_context=zmq_context)
+
+    return team_player, zmq_context
 
 
 def create_homezones(width, height):
@@ -336,50 +482,6 @@ class Bot:
             return out.getvalue()
 
 
-def _rebuild_universe(bots):
-    """ Rebuilds a universe from the list of bots.
-
-    """
-    if not len(bots) == 4:
-        raise ValueError("Can only build a universe with 4 bots.")
-
-    uni_bots = []
-    zones = []
-    for idx, b in enumerate(bots):
-        homezone = (min(b.homezone)[0], max(b.homezone)[0] + 1)
-        if idx < 2:
-            zones.append(homezone)
-
-        bot = datamodel.Bot(idx,
-                            initial_pos=b._initial_position,
-                            team_index=idx%2,
-                            homezone=homezone,
-                            current_pos=b.position,
-                            noisy=b.is_noisy)
-        uni_bots.append(bot)
-
-    uni_teams = [
-        datamodel.Team(0, zones[0], bots[0].score),
-        datamodel.Team(1, zones[1], bots[1].score)
-    ]
-
-    width = max(bots[0].walls)[0] + 1
-    height = max(bots[0].walls)[1] + 1
-    maze = datamodel.Maze(width, height)
-    for pos in maze:
-        if pos in bots[0].walls:
-            maze[pos] = True
-    food = bots[0].food + bots[0].enemy[1].food
-
-    game_state = {
-        'round_index': bots[0].round,
-        'team_name': [bots[0].team_name, bots[1].team_name],
-        'timeout_teams': [bots[0].timeout_count, bots[1].timeout_count]
-    }
-
-    return datamodel.CTFUniverse(maze, food, uni_teams, uni_bots), game_state
-
-
 # def __init__(self, *, bot_index, position, initial_position, walls, homezone, food, is_noisy, score, random, round, is_blue):
 def make_bots(*, walls, team, enemy, round, bot_turn, seed=None):
     bots = {}
@@ -440,28 +542,39 @@ def bots_from_universe(universe, rng, round, team_name, timeout_count):
                      team_name=team_name,
                      timeout_count=timeout_count)
 
-def bots_from_layout(layout, is_blue, score, rng, round, team_name, timeout_count):
+def bot_from_layout(layout, is_blue, score, round, team_name, timeout_count):
     """ Creates 4 bots given a layout. """
-    if is_blue:
-        positions = [layout.bots[0], layout.enemy[0], layout.bots[1], layout.enemy[1]]
-    else:
-        positions = [layout.enemy[0], layout.bots[0], layout.enemy[1], layout.bots[1]]
+    width = max(layout.walls)[0]
+    def in_homezone(position, is_blue):
+        on_left_side = position[0] < width // 2
+        if is_blue:
+            return on_left_side
+        else:
+            return not on_left_side
 
-    # initial positions are grouped by [blue_initials, red_initials] in the layout
-    # we have to reorder them.
-    initial_positions=[layout.initial_positions[0][0], layout.initial_positions[1][0],
-                       layout.initial_positions[0][1], layout.initial_positions[1][1]]
+    team = {
+        'bot_positions': layout.bots[:],
+        'team_index': 0 if is_blue else 1,
+        'score': 0,
+        'has_respawned': False,
+        'timeout_count': 0,
+        'food': [food for food in layout.food if in_homezone(food, is_blue)],
+    }
+    enemy = {
+        'bot_positions': layout.enemy[:],
+        'team_index': 0 if not is_blue else 1,
+        'score': 0,
+        'timeout_count': 0,
+        'food': [food for food in layout.food if in_homezone(food, not is_blue)],
+        'is_noisy': [False] * len(layout.enemy),
+    }
 
     return make_bots(walls=layout.walls[:],
-                     food=layout.food,
-                     positions=positions,
-                     initial_positions=initial_positions,
-                     score=score,
-                     is_noisy=[False] * 4,
-                     rng=rng,
-                     round=round,
-                     team_name=team_name,
-                     timeout_count=timeout_count)
+                     team=team,
+                     enemy=enemy,
+                     round=None,
+                     bot_turn=0,
+                     seed=None)
 
 
 def new_style_team(module):
@@ -755,39 +868,46 @@ def load_layout(layout_str):
         build.append(stripped)
 
     height = len(build)
-    mesh = datamodel.Mesh(width, height, data=list("".join(build)))
+    data=list("".join(build))
+    def idx_to_coord(idx):
+        """ Maps a 1-D index to a 2-D coord given a width and height. """
+        return (idx % width, idx // width)
+
     # Check that the layout is surrounded with walls
-    for i in range(width):
-        if not (mesh[i, 0] == mesh[i, height - 1] == '#'):
-            raise ValueError("Layout not surrounded with #.")
-    for j in range(height):
-        if not (mesh[0, j] == mesh[width - 1, j] == '#'):
-            raise ValueError("Layout not surrounded with #.")
+    for idx, char in enumerate(data):
+        x, y = idx_to_coord(idx)
+        if x == 0 or x == width - 1:
+            if not char == '#':
+                raise ValueError(f"Layout not surrounded with # at ({x}, {y}).")
+        if y == 0 or y == height - 1:
+            if not char == '#':
+                raise ValueError(f"Layout not surrounded with # at ({x}, {y}).")
 
     walls = []
     # extract the non-wall values from mesh
-    for idx, val in mesh.items():
-        # We know that each val is only one character, so it is
+    for idx, char in enumerate(data):
+        coord = idx_to_coord(idx)
+        # We know that each char is only one character, so it is
         # either wall or something else
-        if '#' in val:
-            walls.append(idx)
+        if '#' in char:
+            walls.append(coord)
         # free: skip
-        elif ' ' in val:
+        elif ' ' in char:
             continue
         # food
-        elif '.' in val:
-            food.append(idx)
+        elif '.' in char:
+            food.append(coord)
         # other
         else:
-            if 'E' in val:
+            if 'E' in char:
                 # We can have several undefined enemies
-                enemy.append(idx)
-            elif '0' in val:
-                bots[0] = idx
-            elif '1' in val:
-                bots[1] = idx
+                enemy.append(coord)
+            elif '0' in char:
+                bots[0] = coord
+            elif '1' in char:
+                bots[1] = coord
             else:
-                raise ValueError("Unknown character %s in maze." % val)
+                raise ValueError("Unknown character %s in maze." % char)
 
     walls = sorted(walls)
     return Layout(walls, food, bots, enemy)
