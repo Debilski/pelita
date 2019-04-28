@@ -63,7 +63,24 @@ small_test_layouts = [
     #####0##
     #####  #
     ########
-    """]
+    """,
+    # similarly degenerate case: 2 starts in the enemy’s homezone,
+    # even though there would still be space in its own homezone
+    # TODO: The initial position algorithm could be adapted to
+    # prefer the homezones before going to other territory
+    # (this will reduce awkward respawn situations).
+    """
+    ########
+    #    1##
+    #0### 3#
+    #### ###
+    #### ###
+    #### ###
+    ##### ##
+    #####2 #
+    ########
+    """,
+    ]
 
 @pytest.mark.parametrize('simple_layout', small_test_layouts)
 def test_initial_positions(simple_layout):
@@ -748,6 +765,16 @@ def test_update_round_counter():
         with pytest.raises(ValueError):
             res = game.update_round_counter({'turn': turn0, 'round': round0, 'gameover': True})
 
+
+
+def test_not_well_defined_layout():
+    l = """
+    ########
+    #  0.3 #
+    # 3.1  #
+    ########
+    """
+    ...
 
 @pytest.mark.parametrize('bot_to_move', [0, 1, 2, 3])
 def test_finished_when_no_food(bot_to_move):

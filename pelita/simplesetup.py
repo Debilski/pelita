@@ -158,7 +158,7 @@ class ZMQConnection:
         msg_uuid = str(uuid.uuid4())
         _logger.debug("---> %r [%s]", action, msg_uuid)
 
-        # Check before sending. Forever is a long time.
+        # Check before sending that the socket can receive
         socks = dict(self.pollout.poll(timeout * 1000))
         if socks.get(self.socket) == zmq.POLLOUT:
             # I think we need to set NOBLOCK here, else we may run into a
