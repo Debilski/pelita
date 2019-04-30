@@ -103,14 +103,14 @@ class Team(AbstractTeam):
                 self._bot_track[idx] = []
 
         # Add our track
-        if len(self._bot_track[me.bot_turn]) == 0:
-            self._bot_track[me.bot_turn] = [me.position]
+        self._bot_track[me.bot_turn].append(me.position)
 
         for idx, mybot in enumerate(team):
             # If the track of any bot is empty,
             # Add its current position
             if me.bot_turn != idx:
-                self._bot_track[idx].append(mybot.position)
+                if len(self._bot_track[idx]) == 0:
+                    self._bot_track[idx].append(mybot.position)
 
             mybot.track = self._bot_track[idx][:]
 
@@ -160,6 +160,9 @@ class RemoteTeam:
         if idx == 1:
             color='red'
         self.proc = self._call_pelita_player(team_spec, self.bound_to_address, color=color)
+
+    def is_running(self):
+        return self.proc[0].poll() is None
 
     def _call_pelita_player(self, team_spec, address, color='', dump=None):
         """ Starts another process with the same Python executable,
@@ -398,7 +401,7 @@ class Bot:
     @property
     def turn(self):
         """ The turn of our bot. """
-        return self.bot_index // 2
+        return self.bot_index % 2
 
     @property
     def other(self):
@@ -522,7 +525,7 @@ def make_bots(*, walls, team, enemy, round, bot_turn, seed=None):
         b = Bot(bot_index=idx,
             is_on_team=True,
             score=team['score'],
-            has_respawned=team['has_respawned'],
+            has_respawned=team['has_respawned'][idx],
             timeout_count=team['timeout_count'],
             food=team['food'],
             walls=walls,
