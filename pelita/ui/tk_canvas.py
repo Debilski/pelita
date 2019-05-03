@@ -630,6 +630,7 @@ class TkApplication:
         if not self.size_changed:
             return
         self.ui.game_canvas.delete("wall")
+        self.wall_items = []
         num = 0
         for wall in game_state['walls']:
             model_x, model_y = wall
@@ -639,6 +640,7 @@ class TkApplication:
                               if [model_x + dx, model_y + dy] in game_state['walls']]
             wall_item = Wall(self.mesh_graph, wall_neighbors=wall_neighbors, position=(model_x, model_y))
             wall_item.draw(self.ui.game_canvas)
+            self.wall_items.append(wall_item)
             num += 1
 
     def init_bot_sprites(self, bot_positions):
@@ -680,6 +682,9 @@ class TkApplication:
     def request_step(self):
         if not self.controller_socket:
             return
+        
+        if self._game_state['gameover']:
+            return
 
         if self._stop_after is not None:
             next_step = update_round_counter(self._game_state)
@@ -696,6 +701,9 @@ class TkApplication:
 
     def request_round(self):
         if not self.controller_socket:
+            return
+
+        if self._game_state['gameover']:
             return
 
         if self._game_state['round'] is not None:

@@ -453,6 +453,8 @@ def play_turn(game_state):
     # request a new move from the current team
     try:
         position_dict = request_new_position(game_state)
+        if "error" in position_dict:
+            raise FatalException(f"Exception in client: {position_dict['error']}")
         try:
             position = tuple(position_dict['move'])
         except TypeError as e:
@@ -466,7 +468,8 @@ def play_turn(game_state):
         # FatalExceptions (such as PlayerDisconnect) should immediately
         # finish the game
         exception_event = {
-            'type': str(e),
+            'type': e.__class__.__name__,
+            'description': str(e),
             'turn': game_state['turn'],
             'round': game_state['round'],
         }
@@ -476,7 +479,8 @@ def play_turn(game_state):
         # NonFatalExceptions (such as Timeouts and ValueErrors in the JSON handling)
         # are collected and added to team_errors
         exception_event = {
-            'type': str(e),
+            'type': e.__class__.__name__,
+            'description': str(e),
             'turn': game_state['turn'],
             'round': game_state['round'],
         }

@@ -115,7 +115,13 @@ class Team(AbstractTeam):
             mybot.track = self._bot_track[idx][:]
 
         self._team_game = team
-        move, state = self._team_move(self._team_game[me.bot_turn], self._team_state)
+
+        try:
+            move, state = self._team_move(self._team_game[me.bot_turn], self._team_state)
+        except Exception as e:
+            return {
+                "error": repr(e),
+            }
 
         # restore the team state
         self._team_state = state
@@ -221,6 +227,8 @@ class RemoteTeam:
             reply = self.zmqconnection.recv_timeout(self.timeout_length)
             # make sure it is a dict
             reply = dict(reply)
+            if "error" in reply:
+                return reply
             # make sure that the move is a tuple
             reply["move"] = tuple(reply.get("move"))
             return reply
@@ -450,7 +458,7 @@ class Bot:
     @property
     def eaten(self):
         """ True if this bot has been eaten in the last turn. """
-        return self._eaten
+        return self.has_respawned
 
     def _repr_html_(self):
         """ Jupyter-friendly representation. """
