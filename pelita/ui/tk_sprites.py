@@ -76,10 +76,11 @@ class TkSprite:
         canvas.delete(self.tag)
 
 class BotSprite(TkSprite):
-    def __init__(self, mesh, team=0, bot_id=0, **kwargs):
+    def __init__(self, mesh, team=0, bot_id=0, shadow=False, **kwargs):
         self.bot_id = bot_id
         self.team = team
         self.width = mesh.mesh_width
+        self.shadow = shadow
 
         self.is_harvester = None
 
@@ -151,16 +152,23 @@ class BotSprite(TkSprite):
     def draw(self, canvas, game_state):
         self.is_harvester = self.is_harvester_at(game_state['bots'][self.bot_id])
 
+        if self.shadow:
+            _BLUE = "#a4bed5"
+            _RED = "#e7b1b3"
+        else:
+            _BLUE = BLUE
+            _RED = RED
+
         if self.is_harvester:
             if self.team == 0:
-                self.draw_bot(canvas, outer_col=BLUE, eye_col=YELLOW, mirror=True)
+                self.draw_bot(canvas, outer_col=_BLUE, eye_col=YELLOW, mirror=True)
             else:
-                self.draw_bot(canvas, outer_col=RED, eye_col=YELLOW)
+                self.draw_bot(canvas, outer_col=_RED, eye_col=YELLOW)
         else:
             if self.team == 0:
-                self.draw_destroyer(canvas, outer_col=BLUE, eye_col=YELLOW, mirror=True)
+                self.draw_destroyer(canvas, outer_col=_BLUE, eye_col=YELLOW, mirror=True)
             else:
-                self.draw_destroyer(canvas, outer_col=RED, eye_col=YELLOW)
+                self.draw_destroyer(canvas, outer_col=_RED, eye_col=YELLOW)
 
     def draw_destroyer(self, canvas, outer_col, eye_col, mirror=False):
         direction = self.direction
