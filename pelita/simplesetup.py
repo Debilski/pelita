@@ -279,8 +279,14 @@ class RemoteTeamPlayer:
         except ZMQUnreachablePeer:
             _logger.info("Could not properly send the message. Maybe just a slow client. Ignoring in set_initial.")
         except ZMQConnectionError as e:
-            _logger.info("Detected a ConnectionError: %s", e)
-            return '%%%s%%' % e
+            if len(e.args > 1):
+                error_type, error_message = e.args
+                _logger.info(f"Client connection failed ({error_type}): {error_message}")
+                return f'%%%{error_type}%%'
+            else:
+                error_message = e.args[0]
+                _logger.info(f"Client connection failed: {error_message}")
+                return f'%%%{e}%%'
 
     def get_move(self, bot_id, game_state):
         try:

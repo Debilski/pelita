@@ -180,7 +180,15 @@ class RemoteTeam:
             color='blue'
         if idx == 1:
             color='red'
-        self.proc = self._call_pelita_player(team_spec, self.bound_to_address, color=color)
+        if team_spec is None:
+            self.proc = None
+        else:
+            self.proc = self._call_pelita_player(team_spec, self.bound_to_address, color=color)
+
+    def is_running(self):
+        if self.proc is None:
+            return True
+        return self.proc[0].poll() is None
 
     def _call_pelita_player(self, team_spec, address, color='', dump=None):
         """ Starts another process with the same Python executable,
@@ -236,7 +244,7 @@ class RemoteTeam:
             else:
                 error_message = e.args[0]
                 _logger.warning(f"Client connection failed: {error_message}")
-            raise PlayerDisconnected(*e.args) from None
+            raise PlayerDisconnected(e) from None
 
 
     def get_move(self, game_state, timeout_length=None):
@@ -270,7 +278,8 @@ class RemoteTeam:
 
     def __del__(self):
         self._exit()
-        self.proc[0].terminate()
+        if self.proc:
+            self.proc[0].terminate()
 
     def __repr__(self):
         team_name = f" ({self._team_name})" if self._team_name else ""
@@ -310,14 +319,14 @@ def make_team(team_spec, team_name=None, zmq_context=None, idx=None):
         team_player = Team(team_name, team_spec)
     elif isinstance(team_spec, str):
         _logger.debug("Making a remote team for %s", team_spec)
+        if not zmq_context:
+            zmq_context = zmq.Context()
         # wrap the move function in a Team
         if team_spec.startswith('tcp://'):
             # remote team TODO
-            pass
+            team_player = RemoteTeam(team_spec=None, address=team_spec, zmq_context=zmq_context, idx=idx)
         else:
             # start pelita-player
-            if not zmq_context:
-                zmq_context = zmq.Context()
             team_player = RemoteTeam(team_spec=team_spec, zmq_context=zmq_context, idx=idx)
 
     return team_player, zmq_context

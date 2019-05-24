@@ -33,11 +33,11 @@ class GameState:
 
     def width(self):
         """ The width of the maze. """
-        return max(self.walls)[0]
+        return max(self.walls)[0] + 1
 
     def height(self):
         """ The height of the maze. """
-        return max(self.walls)[1]
+        return max(self.walls)[1] + 1
 
     ### Round/turn information
     #: Current bot
@@ -228,7 +228,6 @@ def setup_viewers(viewers=None, options=None):
 
     return viewer_state
 
-
 def setup_game(team_specs, *, layout_dict, max_rounds=300, layout_name="", seed=None, dump=False,
                max_team_errors=5, timeout_length=3, viewers=None, controller=None, viewer_options=None):
     """ Generates a game state for the given teams and layout with otherwise default values. """
@@ -297,6 +296,10 @@ def setup_game(team_specs, *, layout_dict, max_rounds=300, layout_name="", seed=
     team_state = setup_teams(team_specs, game_state)
     game_state.update(team_state)
 
+    # Check if one of the teams has already generate a fatal error
+    # or if the game has finished.
+    game_state.update(check_gameover(game_state))
+
     # Send updated game state with team names to the viewers
     update_viewers(game_state)
 
@@ -350,6 +353,11 @@ def request_new_position(game_state):
     team = game_state['turn'] % 2
     bot_turn = game_state['turn'] // 2
     move_fun = game_state['teams'][team]
+
+    if hasattr(move_fun, 'is_running'):
+        if move_fun.is_running() is False:
+            print("XXfdslkjafkldjflkajlkjlljlkjXXX")
+#            raise FatalException("Process not active anymore.")
 
     bot_state = prepare_bot_state(game_state)
     new_position = move_fun.get_move(bot_state)
@@ -461,9 +469,11 @@ def play_turn(game_state):
         raise ValueError("Game is already over!")
 
     # Check if the game is already finished (but gameover had not been set)
-    # TODO maybe also check for errors here
-    game_state.update(check_final_move(game_state))
+    # TODO: Prove that this check is needed here
+    print(game_state)
+#    game_state.update(check_gameover(game_state))
     if game_state['gameover']:
+        update_viewers(game_state)
         return game_state
 
     # Now update the round counter
@@ -511,11 +521,24 @@ def play_turn(game_state):
         position = None
         game_print(turn, f"{type(e).__name__}: {e}")
 
-    # try to execute the move and return the new state
-    game_state = apply_move(game_state, position)
+    # Check if a team has exceeded their maximum number of errors
+    # Note: Since we already updated the move counter, we do not check anymore,
+    # if the game has exceeded its rounds.
+    # However, if a team has a fatal error (or more than 5 errors), there is no need in applying
+    # the move anymore.
 
-    # Check if this was the last move of the game (final round or food eaten)
-    game_state.update(check_final_move(game_state))
+    # There is no need in applying a move, if a team has exceeded their maximum number of errors
+    #
+
+    game_state.update(check_errors(game_state)) 
+
+    if not game_state['gameover']:
+        # ok. we can apply the move for this team
+        # try to execute the move and return the new state
+        game_state = apply_move(game_state, position)
+
+        # Check again, if we had errors or if this was the last move of the game (final round or food eaten)
+        game_state.update(check_gameover(game_state)) 
 
     # Send updated game state with team names to the viewers
     update_viewers(game_state)
@@ -582,7 +605,7 @@ def apply_move(gamestate, bot_position):
         team_errors.append(error_dict)
 
     # only execute move if errors not exceeded
-    gamestate.update(check_gameover(gamestate))
+    gamestate.update(check_errors(gamestate))
     if gamestate['gameover']:
         return gamestate
 
@@ -625,8 +648,6 @@ def apply_move(gamestate, bot_position):
             bots[turn] = init_positions[turn]
             deaths[team] = deaths[team] + 1
             _logger.info(f"Bot {turn} respawns at {bots[turn]}.")
-
-    gamestate.update(check_gameover(gamestate))
 
     errors = gamestate["errors"]
     errors[team] = team_errors
@@ -683,6 +704,16 @@ def update_round_counter(game_state):
 
 
 def check_gameover(game_state):
+    """ Checks if this was the final moves or if the errors have exceeded the threshold. """
+    winning_dict = check_errors(game_state)
+    if winning_dict['gameover']:
+        return winning_dict
+
+    winning_dict = check_final_move(game_state)
+    return winning_dict
+
+
+def check_errors(game_state):
     """ Checks for errors and fatal errors in `game_state` and sets the winner
     accordingly.
 
@@ -696,6 +727,48 @@ def check_gameover(game_state):
     # check for game over
     whowins = None
     gameover = False
+
+    # If any team has a fatal error, this team loses.
+    # If both teams have a fatal error, it’s a draw.
+    num_fatals = [len(f) for f in game_state['fatal_errors']]
+    if num_fatals[0] == 0 and num_fatals[1] == 0:
+        pass
+    elif num_fatals[0] > 0 and num_fatals[1] > 0:
+        gameover = True
+        whowins = 2 # draw
+    else:
+        for team in (0, 1):
+            if num_fatals[team] > 0:
+                gameover = True
+                whowins = 1 - team
+    
+    if gameover:
+        return {
+            'whowins': whowins,
+            'gameover': gameover
+        }
+
+
+    # If any team has a more than 4 errors, this team loses.
+    # If both teams have more than 4 errors, it’s a draw.
+    num_errors = [len(f) for f in game_state['errors']]
+    if num_errors[0] <= 4 and num_errors[1] <= 4:
+        pass
+    elif num_errors[0] > 4 and num_errors[1] > 4:
+        gameover = True
+        whowins = 2 # draw
+    else:
+        for team in (0, 1):
+            if num_errors[team] > 4:
+                gameover = True
+                whowins = 1 - team
+    
+    if gameover:
+        return {
+            'whowins': whowins,
+            'gameover': gameover
+        }
+
 
     for team in (0, 1):
         if len(game_state['errors'][team]) > 4 or game_state['fatal_errors'][team]:
