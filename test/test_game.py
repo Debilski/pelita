@@ -805,6 +805,15 @@ def test_not_well_defined_layout():
     """
     ...
 
+def test_not_well_defined_layout():
+    l = """
+    ########
+    #  0.3 #
+    # 3.1  #
+    ########
+    """
+    ...
+
 @pytest.mark.parametrize('bot_to_move', [0, 1, 2, 3])
 def test_finished_when_no_food(bot_to_move):
     """ Test that the game is over when a team has eaten its food. """

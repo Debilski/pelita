@@ -99,7 +99,7 @@ class GameState:
     times_killed: typing.List[int]
 
     #: Recently respawned?
-    respawned: typing.List[int] 
+    respawned: typing.List[int]
 
     #: Messages the bots say. Keeps only the recent one at the respective bot’s index.
     say: typing.List[str]
@@ -239,7 +239,7 @@ def setup_game(team_specs, *, layout_dict, max_rounds=300, layout_name="", seed=
         return team_food
 
     viewer_state = setup_viewers(viewers, options=viewer_options)
-    
+
     width = max(layout_dict['walls'])[0] + 1
     food = split_food(width, layout_dict['food'])
 
@@ -320,7 +320,7 @@ def setup_teams(team_specs, game_state):
         team, zmq_context = make_team(team_spec, idx=idx)
         teams.append(team)
 
-    # Send the initial state to the teams and await the team name 
+    # Send the initial state to the teams and await the team name
     team_names = []
     for idx, team in enumerate(teams):
         try:
