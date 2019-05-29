@@ -4,7 +4,9 @@ from functools import reduce
 from io import StringIO
 import logging
 import random
+import signal
 import subprocess
+import sys
 import traceback
 
 import zmq
@@ -16,6 +18,14 @@ from ..simplesetup import ZMQConnection, ZMQConnectionError, ZMQReplyTimeout, ZM
 
 
 _logger = logging.getLogger(__name__)
+_REMOTE_PROCS = []
+
+def terminate_subprocesses(signum, frame):
+    for proc in _REMOTE_PROCS:
+        proc.terminate()
+    sys.exit()
+
+signal.signal(signal.SIGTERM, terminate_subprocesses)
 
 
 class Team(AbstractTeam):
@@ -200,9 +210,11 @@ class RemoteTeam:
         if dump:
             stdout = Path(dump + '.' + (color or module_spec) + '.out').open('w')
             stderr = Path(dump + '.' + (color or module_spec) + '.err').open('w')
-            return (subprocess.Popen(external_call, stdout=stdout, stderr=stderr), stdout, stderr)
+            proc = (subprocess.Popen(external_call, stdout=stdout, stderr=stderr), stdout, stderr)
         else:
-            return (subprocess.Popen(external_call), None, None)
+            proc = (subprocess.Popen(external_call), None, None)
+        _REMOTE_PROCS.append(proc[0])
+        return proc
 
     # TODO
 #   def team_name(self):
@@ -268,8 +280,17 @@ class RemoteTeam:
             _logger.info("Remote Player %r is already dead during exit. Ignoring.", self)
 
     def __del__(self):
-        self._exit()
+        if self.proc[0].poll() is None:
+            self._exit()
+        else:
+            _logger.info("Remote Player %r is already dead during exit. Ignoring.", self)
         self.proc[0].terminate()
+        # Removing ourselves from the _REMOTE_PROCS list, if we have terminated
+        if self.proc[0].poll() is not None:
+            try:
+                _REMOTE_PROCS.remove(self.proc[0])
+            except ValueError:
+                pass
 
     def __repr__(self):
         team_name = f" ({self._team_name})" if self._team_name else ""
