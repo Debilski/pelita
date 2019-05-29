@@ -133,6 +133,19 @@ def test_no_initial_positions_possible(bad_layout):
         initial_positions(parsed['walls'])
 
 
+def test_not_well_defined_layout():
+    l = """
+    ########
+    #  0.3 #
+    # 3.1  #
+    ########
+    """
+    parsed = layout.parse_layout(l)
+    print(parsed)
+    assert False
+
+
+
 @pytest.mark.parametrize('layout_t', [layout.get_random_layout() for _ in range(30)])
 def test_initial_positions_same_in_layout_random(layout_t):
     """Check initial positions are the same as what the layout says for 30 random layouts"""
