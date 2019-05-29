@@ -168,6 +168,7 @@ def load_factory(pathspec: str):
     FileNotFoundError
         if the parent folder cannot be found
     """
+    # TODO: remove the factory or find a better way to use it
     # strip off the factory_name after the first :
     pathname, _, factory_name = pathspec.partition(':')
     factory_name = factory_name or DEFAULT_FACTORY
@@ -186,10 +187,7 @@ def load_factory(pathspec: str):
     with with_sys_path(dirname):
         module = importlib.import_module(modname)
 
-    try:
-        return getattr(module, factory_name)
-    except AttributeError as e:
-        return new_style_team(module)
+    return new_style_team(module)
 
 
 def with_zmq_router(team, address):

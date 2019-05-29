@@ -144,6 +144,7 @@ class Team(AbstractTeam):
             # Our client had an exception. We print a traceback and
             # return the type of the exception to the server.
             traceback.print_exc()
+            raise e from None
             return {
                 "error": (type(e).__name__, str(e)),
             }

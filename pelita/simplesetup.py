@@ -186,23 +186,20 @@ class ZMQConnection:
         #print repr(json_msg)
 
         try:
-            msg_error = py_obj['__error__']
-            error_type, error_message = msg_error
-            _logger.warning(f'Received error reply ({error_type}): {error_message}. Closing socket.')
-            self.socket.close()
-            raise ZMQConnectionError(*msg_error)
-        except KeyError:
-            pass
-
-        try:
             msg_uuid = py_obj["__uuid__"]
         except KeyError:
             _logger.warning('__uuid__ missing in message.')
             msg_uuid = None
-        
-        msg_return = py_obj.get("__return__")
 
-        _logger.debug("<--- %r [%s]", msg_return, msg_uuid)
+        if '__error__' in py_obj:
+            msg_error = py_obj['__error__']
+            error_type, error_message = msg_error
+            _logger.warning("<!-- %r [%s] Closing Socket.", error_type, msg_uuid)
+            self.socket.close()
+#            raise ZMQConnectionError(*msg_error)
+        elif '__return__' in py_obj:
+            msg_return = py_obj.get("__return__")
+            _logger.debug("<--- %r [%s]", msg_return, msg_uuid)
 
         if msg_uuid == self.last_uuid:
             self.last_uuid = None
@@ -569,17 +566,19 @@ class SimpleClient:
             # be fixed analogous to the `expose` method in
             # the previous messaging framework.
             retval = getattr(self, action)(**data)
+            message_obj = {"__uuid__": uuid_, "__return__": retval}
         except (KeyboardInterrupt, ExitLoop):
             raise
         except Exception as e:
+            print("§ksdjhaflkfhdlqa flkh")
             msg = "Exception in client code for team %s." % self.team
             print(msg, file=sys.stderr)
+            message_obj = {"__uuid__": uuid_, "__error__": (e.__class__.__name__, str(e))}
             # return None. Let it crash next time the server tries to send.
-            retval = None
+            #retval = None
             raise
         finally:
             try:
-                message_obj = {"__uuid__": uuid_, "__return__": retval}
                 json_message = json.dumps(message_obj, default=json_default_handler)
                 self.socket.send_unicode(json_message)
             except NameError:
@@ -622,24 +621,15 @@ class SimplePublisher:
         self.socket_addr = bind_socket(self.socket, self.address, '--publish')
         _logger.debug("Bound zmq.PUB to {}".format(self.socket_addr))
 
-
-    def _send(self, message):
-        _logger.debug("--#>")
+    def _send(self, action, data):
+        info = {'round': data['round'], 'turn': data['turn']}
+        if data['gameover']:
+            info['gameover'] = True
+        _logger.debug(f"--#> [{action}] %r", info)
+        message = {"__action__": action, "__data__": data}
         as_json = json.dumps(message)
         self.socket.send_unicode(as_json)
 
-    def set_initial(self, game_state):
-        message = {"__action__": "set_initial",
-                   "__data__": {"game_state": game_state}}
-        self._send(message)
-
-    def observe(self, game_state):
-        message = {"__action__": "observe",
-                   "__data__": {"game_state": game_state}}
-        self._send(message)
-
     def show_state(self, game_state):
-        message = {"__action__": "observe",
-                   "__data__": game_state}
-        self._send(message)
+        self._send(action="observe", data=game_state)
 
