@@ -6,8 +6,9 @@ import collections
 from pelita.datamodel import CTFUniverse
 from pelita.game_master import GameMaster, ManhattanNoiser, PlayerTimeout, NoFoodWarning
 from pelita.player import AbstractPlayer, SimpleTeam, StoppingPlayer, SteppingPlayer
-from pelita.viewer import AbstractViewer
 
+class AbstractViewer:
+    pass
 
 class TestGameMaster:
     def test_team_names(self):
