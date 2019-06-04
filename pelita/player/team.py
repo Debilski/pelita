@@ -18,6 +18,7 @@ from ..simplesetup import ZMQConnection, ZMQConnectionError, ZMQReplyTimeout, ZM
 
 
 _logger = logging.getLogger(__name__)
+
 _REMOTE_PROCS = []
 
 def terminate_subprocesses(signum, frame):
