@@ -296,7 +296,7 @@ def main():
         if not args.team_specs:
             raise ValueError("No teams specified.")
         for team_spec in args.team_specs:
-            team_name = libpelita.check_team(libpelita.prepare_team(team_spec))
+            team_name = libpelita.check_team(team_spec)
             print("NAME:", team_name)
         sys.exit(0)
 
@@ -304,12 +304,6 @@ def main():
     viewers = []
     if args.dump:
         viewers.append(pelita.viewer.DumpingViewer(open(args.dump, "w")))
-    if args.viewer == 'ascii':
-        viewers.append(pelita.viewer.AsciiViewer())
-    if args.viewer == 'progress':
-        viewers.append(pelita.viewer.ProgressViewer())
-    if args.reply_to:
-        viewers.append(pelita.viewer.ReplyToViewer(args.reply_to))
     if args.viewer == 'null':
         pass
 
@@ -392,10 +386,15 @@ def main():
         "stop_at": stop_at
     }
 
+    if args.reply_to:
+        reply_to_viewer = [('reply-to', args.reply_to)]
+    else:
+        reply_to_viewer = []
+
     layout_dict = layout.parse_layout(layout_string)
     game.run_game(team_specs=team_specs, max_rounds=args.rounds, layout_dict=layout_dict, layout_name=layout_name, seed=args.seed,
                   timeout_length=args.timeout_length, max_team_errors=args.max_timeouts, dump=args.dump,
-                  viewers=[args.viewer], viewer_options=viewer_options)
+                  viewers=[args.viewer] + reply_to_viewer, viewer_options=viewer_options)
 
 if __name__ == '__main__':
     main()
