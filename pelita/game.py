@@ -251,6 +251,8 @@ def setup_viewers(viewers=None, options=None):
         else:
             raise ValueError(f"Unknown viewer {viewer}.")
 
+    from .viewer import SVGViewer
+    viewer_state['viewers'].append(SVGViewer())
     # Add the result printer as the final viewer:
     viewer_state['viewers'].append(ResultPrinter())
 
@@ -304,7 +306,7 @@ def setup_game(team_specs, *, layout_dict, max_rounds=300, layout_name="", seed=
         turn=None,
         round=None,
         max_rounds=max_rounds,
-        timeout=3,
+        timeout=timeout_length,
         noise_radius=NOISE_RADIUS,
         sight_distance=SIGHT_DISTANCE,
         gameover=False,
@@ -405,7 +407,7 @@ def request_new_position(game_state):
     move_fun = game_state['teams'][team]
 
     bot_state = prepare_bot_state(game_state)
-    new_position = move_fun.get_move(bot_state)
+    new_position = move_fun.get_move(bot_state, timeout_length=game_state['timeout'])
     return new_position
 
 
