@@ -86,21 +86,28 @@ class SVGViewer:
         self.folder.mkdir()
         self.index = 0
     def show_state(self, game_state):
+        filename = self.folder / f"pelita-{self.index:04d}.svg"
+        _logger.info(f"Writing SVG file {filename}.")
+        filename.write_text(viewer_state_to_svg(game_state))
+        self.index += 1
+
+
+def viewer_state_to_svg(viewer_state, html_header=False):
         # svg scaled up by a factor of 12
         SCALE = 12
 
         # blue_col = rgb(94, 158, 217)
         # red_col = rgb(235, 90, 90)
 
-        width, height = layout.wall_dimensions(game_state['walls'])
+        width, height = layout.wall_dimensions(viewer_state['walls'])
 
         wall_elems = []
-        for x, y in game_state['walls']:
+        for x, y in viewer_state['walls']:
             x1 = x
             y1 = y
             neighbor_elems = [
                 (x + dx, y + dy) for dx, dy in [(-1, 0), (1, 0), (0, 1), (0, -1)]
-                if (x + dx, y + dy) in game_state['walls']
+                if (x + dx, y + dy) in viewer_state['walls']
             ]
             if neighbor_elems:
                 for x2, y2 in neighbor_elems:
@@ -116,7 +123,7 @@ class SVGViewer:
 
         bots = []
         border = width // 2
-        for idx, bot in enumerate(game_state['bots']):
+        for idx, bot in enumerate(viewer_state['bots']):
             if idx % 2 == 0:
                 col = "blue"
                 bot_type = "ghost" if bot[0] < border else "pacman"
@@ -131,7 +138,7 @@ class SVGViewer:
 
         food = "\n".join(
             f"""<circle cx="{x * SCALE + 6}" cy="{y * SCALE + 6}" r="3" class="{"foodblue" if x < border else "foodred"}"/> """
-            for x, y in game_state['food']
+            for x, y in viewer_state['food']
         )
 
         template = f"""
@@ -230,10 +237,18 @@ class SVGViewer:
         </svg>
         """
 
-        filename = self.folder / f"pelita-{self.index:04d}.svg"
-        _logger.info(f"Writing SVG file {filename}.")
-        filename.write_text(template)
-        self.index += 1
+        if html_header:
+            return f"""<html>
+
+            <div>{viewer_state['team_names'][0]} vs {viewer_state['team_names'][1]}</div>
+
+            {template}
+
+            <div><small>round: {viewer_state['round']}/{viewer_state['max_rounds']}, turn: {viewer_state['turn']}. {"Game over" if viewer_state['gameover'] else ""}</small></div>
+            </html>"""
+
+        return template
+
 
 
 class ReplyToViewer:
