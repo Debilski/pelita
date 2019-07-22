@@ -25,7 +25,7 @@ def setup_test_game(*, layout, game=None, is_blue=True, round=None, score=None, 
     if score is None:
         score = [0, 0]
 
-    layout = create_layout(layout, food=food, bots=bots, enemy=enemy)
+    layout = create_layout(layout, is_blue=is_blue) #, food=food, bots=bots, enemy=enemy)
     food = split_food(layout)
 
     if is_blue:
@@ -38,7 +38,7 @@ def setup_test_game(*, layout, game=None, is_blue=True, round=None, score=None, 
     rng = random.Random(seed)
 
     team = {
-        'bot_positions': layout.bots[:],
+        'bot_positions': layout['bots'][:],
         'team_index': team_index,
         'score': score[team_index],
         'has_respawned': [True, True],
@@ -47,12 +47,12 @@ def setup_test_game(*, layout, game=None, is_blue=True, round=None, score=None, 
         'name': "blue" if is_blue else "red"
     }
     enemy = {
-        'bot_positions': layout.enemy[:],
+        'bot_positions': layout['enemy'][:],
         'team_index': enemy_index,
         'score': score[enemy_index],
         'timeout_count': 0,
         'food': food[enemy_index],
-        'is_noisy': [False] * len(layout.enemy),
+        'is_noisy': [False] * len(layout['enemy']),
         'name': "red" if is_blue else "blue"
     }
 

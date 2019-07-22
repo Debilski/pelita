@@ -40,18 +40,18 @@ class TestLayout:
 
     def test_load(self):
         layout = create_layout(self.layout, self.layout2)
-        assert layout.bots == [(6, 1), (1, 2)]
-        assert layout.enemy == [(5, 1), (2, 2)]
+        assert layout['bots'] == [(6, 1), (1, 2)]
+        assert layout['enemy'] == [(5, 1), (2, 2)]
 
     def test_concat(self):
         layout = create_layout(self.layout + self.layout2)
-        assert layout.bots == [(6, 1), (1, 2)]
-        assert layout.enemy == [(5, 1), (2, 2)]
+        assert layout['bots'] == [(6, 1), (1, 2)]
+        assert layout['enemy'] == [(5, 1), (2, 2)]
 
     def test_load1(self):
         layout = create_layout(self.layout)
-        assert layout.bots == [(6, 1), (1, 2)]
-        assert layout.enemy == [(5, 1), (2, 2)]
+        assert layout['bots'] == [(6, 1), (1, 2)]
+        assert layout['enemy'] == [(5, 1), (2, 2)]
 
     def test_equal_positions(self):
         layout_str = """
@@ -76,24 +76,24 @@ class TestLayout:
             ########
         """
         layout = create_layout(layout_str)
-        assert layout.bots == [(1, 1), (1, 1)]
-        assert layout.enemy ==  [(1, 1), (1, 1)]
+        assert layout['bots'] == [(1, 1), (1, 1)]
+        assert layout['enemy'] ==  [(1, 1), (1, 1)]
         setup_test_game(layout=layout_str)
 
     def test_define_after(self):
         layout = create_layout(self.layout, food=[(1, 1)], bots=[None, None], enemy=None)
-        assert layout.bots == [(6, 1), (1, 2)]
-        assert layout.enemy == [(5, 1), (2, 2)]
+        assert layout['bots'] == [(6, 1), (1, 2)]
+        assert layout['enemy'] == [(5, 1), (2, 2)]
         layout = create_layout(self.layout, food=[(1, 1)], bots=[None, (1, 2)], enemy=None)
-        assert layout.bots == [(6, 1), (1, 2)]
-        assert layout.enemy == [(5, 1), (2, 2)]
+        assert layout['bots'] == [(6, 1), (1, 2)]
+        assert layout['enemy'] == [(5, 1), (2, 2)]
 
         layout = create_layout(self.layout, food=[(1, 1)], bots=[None, (1, 2)], enemy=[(5, 1)])
-        assert layout.enemy == [(2, 2), (5, 1)]
+        assert layout['enemy'] == [(2, 2), (5, 1)]
 
         layout = create_layout(self.layout2, food=[(1, 1)], bots=[None, (1, 2)], enemy=[(5, 1), (2, 2)])
-        assert layout.bots == [None, (1, 2)]
-        assert layout.enemy == [(5, 1), (2, 2)]
+        assert layout['bots'] == [None, (1, 2)]
+        assert layout['enemy'] == [(5, 1), (2, 2)]
 
         with pytest.raises(ValueError):
             # placed bot on walls
@@ -108,8 +108,6 @@ class TestLayout:
             layout = create_layout(self.layout2, food=[(1, 1)], bots=[(1, 1), (1, 2), (2, 2)], enemy=[(5, 1), (2, 2)])
 
     def test_repr(self):
-        layout = create_layout(self.layout, food=[(1, 1)], bots=[None, None], enemy=None)
-        assert layout._repr_html_()
         str1 = str(create_layout(self.layout, food=[(1, 1)], bots=[None, None], enemy=None))
         assert str1 == """
 ########
@@ -158,8 +156,6 @@ class TestLayout:
         #0E    #
         ########
         """
-        layout = create_layout(l, food=[(1, 1)], bots=[None, None], enemy=None)
-        assert layout._repr_html_()
         str1 = str(create_layout(l, food=[(1, 1)], bots=[None, None], enemy=None))
         assert str1 == """
 ########

@@ -14,6 +14,7 @@ import zmq
 from . import AbstractTeam
 from .. import libpelita, layout
 from ..exceptions import PlayerDisconnected, PlayerTimeout
+from ..layout import parse_layout
 from ..simplesetup import ZMQConnection, ZMQClientError, ZMQReplyTimeout, ZMQUnreachablePeer, DEAD_CONNECTION_TIMEOUT
 
 
@@ -873,6 +874,10 @@ class Layout:
 
 
 def create_layout(*layout_strings, food=None, bots=None, enemy=None):
+    layout_str = "\n\n".join(layout_strings)
+    return parse_layout(layout_str, allow_enemy_chars=True)
+
+def _create_layout(*layout_strings, food=None, bots=None, enemy=None):
     """ Create a layout from layout strings with additional food, bots and enemy positions.
 
     Walls must be equal in all layout strings. Food positions will be collected.
