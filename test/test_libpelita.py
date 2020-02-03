@@ -90,7 +90,7 @@ def test_write_replay_is_idempotent():
                     '--size', 'small',
                     '--null']
 
-            subprocess.check_output(cmd)
+            subprocess.run(cmd, check=True)
 
             f.seek(0)
             first_run = f.read()
@@ -103,7 +103,7 @@ def test_write_replay_is_idempotent():
                     '--replay', f.name,
                     '--null']
 
-            subprocess.check_output(cmd)
+            subprocess.run(cmd, check=True)
 
             g.seek(0)
             second_run = g.read()
