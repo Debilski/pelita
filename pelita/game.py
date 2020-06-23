@@ -371,6 +371,9 @@ def setup_game(team_specs, *, layout_dict, max_rounds=300, layout_name="", seed=
         # None, if not noisy
         noisy_positions = [None] * 4,
 
+        #: The moves that the bots returned. Keeps only the recent one at the respective bot’s index.
+        requested_moves=[None] * 4,
+
         #: Messages the bots say. Keeps only the recent one at the respective bot’s index.
         say=[""] * 4,
 
@@ -676,6 +679,9 @@ def play_turn(game_state, allow_exceptions=False):
         game_state['errors'][team][(round, turn)] = exception_event
         position = None
         game_print(turn, f"{type(e).__name__}: {e}")
+
+    # If the returned move looks okay, we add it to the list of requested moves
+    game_state['requested_moves'][game_state['turn']] = position
 
     # Check if a team has exceeded their maximum number of errors
     # (we do not want to apply the move in this case)

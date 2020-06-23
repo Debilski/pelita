@@ -435,6 +435,7 @@ class TkApplication:
         self.draw_food(game_state)
 
         self.draw_title(game_state)
+        self.draw_moves(game_state)
         self.draw_bots(game_state)
 
         self.draw_status_info(game_state)
@@ -703,6 +704,12 @@ class TkApplication:
             idx: BotSprite(self.mesh_graph, team=idx % 2, bot_id=idx, position=None, shadow=True)
             for idx, bot in enumerate(bot_positions)
         }
+
+    def draw_moves(self, game_state):
+        if game_state['turn'] is None:
+            return
+        bot = game_state['turn']
+        print(game_state["bots"][bot], game_state['requested_moves'][bot])
 
     def draw_bots(self, game_state):
         if game_state:
