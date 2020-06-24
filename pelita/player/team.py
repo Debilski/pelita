@@ -80,6 +80,9 @@ class Team:
         # Store the walls, which are only transmitted once
         self._walls = game_state['walls']
 
+        # Store the shape, which is only transmitted once
+        self._shape = game_state['shape']
+
         return self.team_name
 
     def get_move(self, game_state):
@@ -98,6 +101,7 @@ class Team:
         move : dict
         """
         me = make_bots(walls=self._walls,
+                       shape=self._shape,
                        team=game_state['team'],
                        enemy=game_state['enemy'],
                        round=game_state['round'],
@@ -404,6 +408,7 @@ class Bot:
                           position,
                           initial_position,
                           walls,
+                          shape,
                           homezone,
                           food,
                           score,
@@ -434,6 +439,7 @@ class Bot:
 
         self.homezone = _ensure_tuples(homezone)
         self.food = _ensure_tuples(food)
+        self.shape = shape
         self.score  = score
         self.kills = kills
         self.deaths = deaths
@@ -621,7 +627,7 @@ class Bot:
 
 
 # def __init__(self, *, bot_index, position, initial_position, walls, homezone, food, is_noisy, score, random, round, is_blue):
-def make_bots(*, walls, team, enemy, round, bot_turn, rng):
+def make_bots(*, walls, shape, team, enemy, round, bot_turn, rng):
     bots = {}
 
     team_index = team['team_index']
@@ -644,6 +650,7 @@ def make_bots(*, walls, team, enemy, round, bot_turn, rng):
             error_count=team['error_count'],
             food=team['food'],
             walls=walls,
+            shape=shape,
             round=round,
             bot_turn=bot_turn,
             bot_char=BOT_I2N[team_index + idx*2],
@@ -668,6 +675,7 @@ def make_bots(*, walls, team, enemy, round, bot_turn, rng):
             error_count=enemy['error_count'],
             food=enemy['food'],
             walls=walls,
+            shape=shape,
             round=round,
             bot_char = BOT_I2N[team_index + idx*2],
             random=rng,
