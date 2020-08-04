@@ -8,9 +8,8 @@ import tkinter
 import tkinter.font
 
 from ..game import next_round_turn
-from .tk_sprites import BotSprite, Food, Wall, col
+from .tk_sprites import BotSprite, Food, Wall, Arrow, RED, BLUE, YELLOW, GREY, BROWN
 from .tk_utils import wm_delete_window_handler
-from .tk_sprites import BotSprite, Food, Wall, RED, BLUE, YELLOW, GREY, BROWN
 from .. import layout
 
 _logger = logging.getLogger(__name__)
@@ -435,9 +434,10 @@ class TkApplication:
         self.draw_food(game_state)
 
         self.draw_title(game_state)
-        self.draw_moves(game_state)
         self.draw_shadow_bots(game_state)
         self.draw_bots(game_state)
+
+        self.draw_moves(game_state)
 
         self.draw_status_info(game_state)
 
@@ -709,8 +709,20 @@ class TkApplication:
     def draw_moves(self, game_state):
         if game_state['turn'] is None:
             return
+
+        self.ui.game_canvas.delete("arrow")
+        # we keep all arrow items stored in a list
+        # some versions of Python seem to forget about drawing
+        # them otherwise
+        self.arrow_items = []
+
         bot = game_state['turn']
-        print(game_state["bots"][bot], game_state['requested_moves'][bot])
+        old_pos, req_pos = _ensure_tuples(game_state['requested_moves'][bot])
+        arrow_item = Arrow(self.mesh_graph, position=old_pos, req_pos=req_pos)
+        arrow_item.draw(self.ui.game_canvas)
+        self.arrow_items.append(arrow_item)
+        print(game_state["bots"][bot], old_pos, req_pos)
+
 
     def draw_bots(self, game_state):
         if game_state:

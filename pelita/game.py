@@ -681,7 +681,8 @@ def play_turn(game_state, allow_exceptions=False):
         game_print(turn, f"{type(e).__name__}: {e}")
 
     # If the returned move looks okay, we add it to the list of requested moves
-    game_state['requested_moves'][game_state['turn']] = position
+    old_position = game_state['bots'][game_state['turn']]
+    game_state['requested_moves'][game_state['turn']] = (old_position, position)
 
     # Check if a team has exceeded their maximum number of errors
     # (we do not want to apply the move in this case)

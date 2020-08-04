@@ -296,3 +296,30 @@ class Food(TkSprite):
         else:
             fill = RED
         canvas.create_oval(self.bounding_box(0.4), fill=fill, width=0, tag=(self.tag, self.food_pos_tag(self.position), "food"))
+
+
+class Arrow(TkSprite):
+    def __init__(self, mesh, req_pos, **kwargs):
+        self.req_pos = req_pos
+
+        super(Arrow, self).__init__(mesh, **kwargs)
+
+    def draw(self, canvas, game_state=None):
+        scale = (self.mesh.half_scale_x + self.mesh.half_scale_y) * 0.1
+        dx = self.req_pos[0] - self.position[0]
+        dy = self.req_pos[1] - self.position[1]
+        canvas.create_line(self.screen((0, 0)), self.screen((dx, dy)), fill=BROWN,
+                                               width=scale, tag=(self.tag, "arrow"), capstyle="round")
+        # arrow head
+        vector = dx + dy * 1j
+        phase = cmath.phase(vector)
+        head_left = vector - cmath.rect(1, phase) + cmath.rect(0.8, phase - cmath.pi/3)
+        head_right = vector - cmath.rect(1, phase) + cmath.rect(0.8, phase + cmath.pi/3)
+
+        points = [
+            self.screen((head_left.real, head_left.imag)),
+            self.screen((vector.real, vector.imag)),
+            self.screen((head_right.real, head_right.imag))
+        ]
+        canvas.create_line(points,
+                           fill=BROWN, width=scale, tag=(self.tag, "arrow"), capstyle="round")
