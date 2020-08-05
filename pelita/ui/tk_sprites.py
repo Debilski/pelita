@@ -9,7 +9,14 @@ def col(red, green, blue):
 
 RED = col(235, 90, 90)
 BLUE = col(94, 158, 217)
+
+LIGHT_BLUE = '#B9D9F6'
+STRONG_BLUE = '#1E6BB1'
+LIGHT_RED = '#FFB0B0'
+STRONG_RED = '#A91919'
+
 YELLOW = col(242, 255, 83)
+YELLOW = '#FFE38B'
 GREY = col(80, 80, 80)
 BROWN = col(48, 26, 22)
 
@@ -305,7 +312,9 @@ class Arrow(TkSprite):
         super(Arrow, self).__init__(mesh, **kwargs)
 
     def draw(self, canvas, game_state=None):
-        scale = (self.mesh.half_scale_x + self.mesh.half_scale_y) * 0.1
+        # Todo: Arrows for staying on spot
+
+        scale = (self.mesh.half_scale_x + self.mesh.half_scale_y) * 0.07
         dx = self.req_pos[0] - self.position[0]
         dy = self.req_pos[1] - self.position[1]
         canvas.create_line(self.screen((0, 0)), self.screen((dx, dy)), fill=BROWN,
@@ -313,8 +322,8 @@ class Arrow(TkSprite):
         # arrow head
         vector = dx + dy * 1j
         phase = cmath.phase(vector)
-        head_left = vector - cmath.rect(1, phase) + cmath.rect(0.8, phase - cmath.pi/3)
-        head_right = vector - cmath.rect(1, phase) + cmath.rect(0.8, phase + cmath.pi/3)
+        head_left = vector - cmath.rect(1, phase) + cmath.rect(0.9, phase - cmath.pi/4)
+        head_right = vector - cmath.rect(1, phase) + cmath.rect(0.9, phase + cmath.pi/4)
 
         points = [
             self.screen((head_left.real, head_left.imag)),
