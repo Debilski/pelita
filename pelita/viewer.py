@@ -40,6 +40,9 @@ class ProgressViewer:
             state.update(game_state)
             del state['walls']
             del state['food']
+            # don’t show some things that are only used for Tk
+            del state['requested_moves']
+            del state['say']
 
             print()
             print("Final state:", state)
