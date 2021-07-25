@@ -26,14 +26,14 @@ class ProgressViewer:
             if turn % 2 == 0:
                 bot_sign = f'\033[94mBlue Team, Bot {bot_idx}\033[0m'
             elif turn % 2 == 1:
-                bot_sign = f'\033[91mRed Team, Bot {bot_idx}\033[0m'
+                bot_sign = f'\033[91mRed Team,  Bot {bot_idx}\033[0m'
         else:
             bot_sign = ' '
         string = ("[%s] %3i%% (%i / %i) [%s]" % (
                     bot_sign, percentage,
                     round_index, game_time,
                     ":".join(str(s) for s in score)))
-        print(string + ("\b" * len(string)), flush=True)
+        print(string + ("\b" * len(string)), flush=True, end="")
 
         if game_state["gameover"]:
             state = {}
