@@ -29,7 +29,7 @@ jobs:
         python -c "import zmq; print('Using pyzmq {} and zmq {}.'.format(zmq.pyzmq_version(), zmq.zmq_version()))"
     - name: Run Pelita CLI as a script
       run: |
-        pelita --rounds 100 --size small
+        pelita --rounds 100
     - name: Make screenshot
       uses: OrbitalOwen/desktop-screenshot-action@0.1
       with:
