@@ -38,8 +38,10 @@ jobs:
       uses: actions/download-artifact@v3
       with:
         name: desktop.jpg
-    - name: Display structure of downloaded files
-      run: ls -R
-    - name: Display types
-      run: file *
+    - name: Post Screenshot
+      uses: edunad/actions-image@v1.0.1
+      with:
+        path: 'desktop.jpg'
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        title: 'Screenshot'
 
