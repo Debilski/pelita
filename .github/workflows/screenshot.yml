@@ -35,7 +35,7 @@ jobs:
       with:
         file-name: 'desktop.jpg'
     - name: Download artifact
-    - uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v3
       with:
         name: desktop.jpg
     - name: Display structure of downloaded files
