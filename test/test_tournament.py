@@ -9,6 +9,11 @@ from pelita.tournament import knockout_mode, roundrobin
 from pelita.tournament.knockout_mode import Team, Match, Bye
 
 
+# if two or more teams are tied:
+# - direct match comparison
+# - fewer timeouts
+# - least total time
+
 def test_match_id():
     assert str(tournament.MatchID()) == 'round1-match01'
     assert str(tournament.MatchID(round=1)) == 'round1-match01'

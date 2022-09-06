@@ -1,3 +1,4 @@
+
 import enum
 import itertools
 import math
@@ -79,21 +80,24 @@ class MatrixElem:
                                                                              BOLD=BOLD if highlighted else "",
                                                                              END=END if highlighted else "")
 
-class Team(namedtuple("Team", ["name"]), MatrixElem):
-    def to_s(self, size=None, trafo=identity, highlighted=False):
-        return self.box(trafo(self.name), size=size, prefix="", padLeft=" ", padRight=" ", highlighted=highlighted)
 
-class Bye(namedtuple("Bye", ["team"]), MatrixElem):
-    def to_s(self, size=None, trafo=identity, highlighted=False):
-        prefix = "──"
-        # return show_team("…", prefix=prefix, padLeft=" ", padRight=" ", size=size)
-        return self.box("", size=size)
 
-class Match(namedtuple("Match", ["opponents", "winner"]), MatrixElem):
+
+class Box(MatrixElem):
+    def __init__(self, item):
+        self.item = item
+
     def to_s(self, size=None, trafo=identity, highlighted=False):
-        prefix = "├─"
-        name = trafo(self.winner)
-        return self.box(name, prefix=prefix, padLeft=" ", padRight=" ", size=size, highlighted=highlighted)
+        if isinstance(self.item, Team):
+            return self.box(trafo(self.name), size=size, prefix="", padLeft=" ", padRight=" ", highlighted=highlighted)
+        if isinstance(self.item, Bye):
+            prefix = "──"
+            # return show_team("…", prefix=prefix, padLeft=" ", padRight=" ", size=size)
+            return self.box("", size=size)
+        if isinstance(self.item, Team):
+            prefix = "├─"
+            name = trafo(self.winner) if (self.winner is not None) else "???"
+            return self.box(name, prefix=prefix, padLeft=" ", padRight=" ", size=size, highlighted=highlighted)
 
 class FinalMatch(namedtuple("FinalMatch", ["t1", "t2"]), MatrixElem):
     def __init__(self, *args, **kwargs):
@@ -131,57 +135,141 @@ class BorderBottom(namedtuple("BorderBottom", ["team", "tight"]), MatrixElem):
         fillElem = "━"
         return self.box("", prefix=prefix, postfix=postfix, padLeft=padLeft, padRight=padRight, fillElem=fillElem, size=size)
 
-def knockout_matrix(tree):
+class MatrixElem:
+    def min_size(self):
+        return len(self.text) + 2
+
+class TeamElem(MatrixElem):
+    def __init__(self, text, idx):
+        if text is None:
+            test = "???"
+        self.text = text
+        self.idx = idx
+
+    def to_string(self, len=None):
+        if len is None:
+            len = self.min_size()
+        connector = "┐ " if self.idx % 2 == 0 else "┘ "
+        return f"{'': <{len}}{self.text}{connector}"
+
+
+class MatchElem(MatrixElem):
+    pass
+
+class FinalElem(MatrixElem):
+    def __init__(self, text):
+        if text is None:
+            test = "???"
+        self.text = text
+
+
+class EmptyElem(MatrixElem):
+    def __init__(self):
+        self.text = None
+
+    def min_size(self):
+        return 0
+
+    def __str__(self) -> str:
+        return ""
+
+    def __repr__(self) -> str:
+        return ""
+
+def arrange_teams(matches):
+    teams_in_round = {}
+    for match in matches:
+        if not match.round in teams_in_round:
+            teams_in_round[match.round] = []
+        if not len(match.opponents) == 2:
+            raise RuntimeError(f"Match {match} must have two opponents")
+
+        for idx, opponent in enumerate(match.opponents):
+            name = opponent.name if opponent is not None else None
+            teams_in_round[match.round].append(TeamElem(name, idx))
+
+    # add final
+    if match.winner is None:
+        teams_in_round[match.round + 1] = [FinalElem(None)]
+    else:
+        teams_in_round[match.round + 1] = [FinalElem(match.opponents[match.winner].name)]
+
+    return teams_in_round
+
+
+def knockout_matrix(matches):
     """
     For now teams is a list (cols) of list (rows) of teams
     """
-    teams = tree_enumerate(tree)
-    print(00000)
-    for t in teams:
-        print(t)
+    teams_in_round = arrange_teams(matches)
+    print(teams_in_round)
 
-    initial_teams = teams[0]
-    N = len(initial_teams)
-    height = N * 2 - 1
-    width = len(teams)
+    n_teams = len(teams_in_round[0])
+    n_rounds = len(teams_in_round)
 
-    matrix = [[Empty() for _w in range(width)] for _h in range(height)]
-    # fill left column with initial teams
-    for idx, t in enumerate(initial_teams):
-        matrix[idx * 2][0] = t
+    height = n_teams * 2 - 1
+    width = n_rounds
+
+    padding = 2
+
+    matrix = [["" for _w in range(width)] for _h in range(height)]
 
     last_match = None
 
-    for g_idx, generation in enumerate(teams):
-        # print("G:", generation)
-        if g_idx == 0:
-            continue
-        col = g_idx
-        left_col = g_idx - 1
-        for m_idx, match in enumerate(generation):
-            print("M:", match)
-            if isinstance(match, Match):
-                # find row idx of the match partners
-                for row_idx, row in enumerate(matrix):
-                    if row[left_col] == match.opponents[0]:
-                        start_row = row_idx
-                    if row[left_col] == match.opponents[1]:
-                        end_row = row_idx
-                middle_row = math.floor(start_row + (end_row - start_row) / 2)
+    for round in range(n_rounds):
+        col = round
+        left_col = round - 1
 
-                # draw next match
-                for row in range(start_row, end_row):
-                    matrix[row][col] = Element('│')
-                matrix[start_row][col] = Element('┐')
-                matrix[end_row][col] = Element('┘')
-                matrix[middle_row][col] = match
-                last_match = (middle_row, col)
+        max_name_length = max(
+            len(matrix[row_idx][round])
+            for row_idx in range(height)
+            ) + 4
 
-            if isinstance(match, Bye):
-                for row_idx, row in enumerate(matrix):
-                    if row[left_col] == match.team:
-                        break
-                matrix[row_idx][col] = match
+        offset = 2 ** round - 1 # offset from the top of the table
+        spacing = 2 ** (round + 1) # space between entries
+
+        # position the teams
+        for t_idx, team in enumerate(teams_in_round[round]):
+            idx = t_idx * spacing + offset
+
+            if not col == n_rounds - 1:
+
+                matrix[idx][col] = team.to_string(max_name_length)
+                if t_idx % 2 == 0:
+                    # place the connector halfway between this and the next index
+                    next_idx  = (t_idx + 1) * spacing + offset
+                    half_idx = (next_idx - next_idx) // 2
+                    for row in range(idx + 1, next_idx):
+                        if row == half_idx:
+                            matrix[row][col] = f"{'': <{max_name_length}}├─"
+                        else:
+                            matrix[row][col] =  f"{'': <{max_name_length}}│ "
+
+    print(matrix)
+        #    print("M:", match)
+
+            # if isinstance(match, Match):
+            #     # find row idx of the match partners
+            #     for row_idx, row in enumerate(matrix):
+            #         if row[left_col] == match.t1:
+            #             start_row = row_idx
+            #         if row[left_col] == match.t2:
+            #             end_row = row_idx
+            #     middle_row = math.floor(start_row + (end_row - start_row) / 2)
+
+            #     # draw next match
+            #     for row in range(start_row, end_row):
+            #         matrix[row][col] = Element('│')
+            #     matrix[start_row][col] = Element('┐')
+            #     matrix[end_row][col] = Element('┘')
+            #     matrix[middle_row][col] = Box(match)
+            #     last_match = (middle_row, col)
+
+            # if isinstance(match, Bye):
+            #     for row_idx, row in enumerate(matrix):
+            #         if row[left_col] == match.team:
+            #             break
+            #     matrix[row_idx][col] = Box(match)
 
     return matrix, last_match
 
@@ -191,42 +279,20 @@ def print_knockout(tree, name_trafo=identity, highlight=None):
 
     matrix, final_match = knockout_matrix(tree)
 
-    winner_row = final_match[0]
-    winning_team = matrix[final_match[0]][final_match[1]].winner
-    winner = matrix[final_match[0]][final_match[1]] = FinalMatch(* matrix[final_match[0]][final_match[1]])
-    winner.winner = winning_team
-
-    def is_tight(elem):
-        return not isinstance(elem, Empty) and not isinstance(elem, Element)
-
-    matrix[winner_row - 1][-1] = BorderTop(winner, is_tight(matrix[winner_row - 1][-2]))
-    matrix[winner_row + 1][-1] = BorderBottom(winner, is_tight(matrix[winner_row + 1][-2]))
-
-    # estimate the width that a column needs
-    colwidths = [0] * len(matrix[0])
-    for row in matrix:
-        for col_idx, elem in enumerate(row):
-            current_width = elem.size(trafo=name_trafo)
-            old_width = colwidths[col_idx]
-            colwidths[col_idx] = max(current_width, old_width)
-
     with StringIO() as output:
-        for row in range(len(matrix)):
-            for col in range(len(matrix[0])):
-                try:
-                    elem = matrix[row][col]
-
-                    str = elem.to_s(colwidths[col], trafo=name_trafo, highlighted=elem in highlight)
-                    print(str, end="", file=output)
-                except AttributeError:
-                    print("Here:", end="")
-                    print(row, col, matrix[row][col])
-                    raise
-            print(file=output)
+        for row in matrix:
+            print("".join(row), file=output)
         return output.getvalue()
+
+def print_knockout2(tree):
+    from . import knockout_mode
+    return knockout_mode.print_knockout(tree)
 
 
 def makepairs(matches):
+
+    from .tournament_state import Team, Bye, Match
+
     if len(matches) == 0:
         raise ValueError("Cannot prepare matches (no teams given).")
     while not len(matches) == 1:
@@ -240,7 +306,34 @@ def makepairs(matches):
         matches = m
     return matches[0]
 
+def prepare_knockout_matches(teams):
+    """ Takes a list of teams and returns the matches for the knock out stage"""
+    if not len(teams) in (2, 4, 8, 16):
+        raise ValueError("Only knock-out matches with 2, 4, 8 or 16 participants are supported.")
+
+    from .tournament_state import Team, Bye, Match
+    # the seed order for a tournament with 16 participants
+    # if we have fewer participants (but still a power of 2),
+    # we can just skip the higher numbers
+    seed = [0, 15, 7, 8, 3, 12, 4, 11, 1, 14, 6, 9, 2, 13, 5, 10]
+
+    seeded_teams = [teams[idx] for idx in seed if idx < len(teams)]
+
+    last_round = list(seeded_teams)
+    while True:
+        matches = []
+
+        for idx, (t0, t1) in enumerate(zip(last_round[0::2], last_round[1::2])):
+            matches.append(Match(idx, "knockout", 1, [t0, t1]))
+
+
+    return matches
+
+
 def prepare_matches(teams, bonusmatch=False):
+
+    from .tournament_state import Team, Bye, Match
+
     """ Takes a ranked list of teams, matches them according to sort_ranks
     and returns the Match tree.
     """
@@ -292,34 +385,23 @@ def tree_depth(tree):
         return 1
 
 def tree_enumerate(tree):
-
-    print("XXX")
-    print(tree
-    )
-
     enumerated = defaultdict(list)
-    teams = {}
 
-    def get_or_add(team):
-        if not team:
-            return None
-        if not team.uuid in teams:
-            teams[team.uuid] = Team(opponent.name)
-        return teams[team.uuid]
-
-
-    for match in tree:
-        if match.round == 0:
-            for opponent in match.opponents:
-                enumerated[0].append(get_or_add(opponent))
-        if match.winner is not None:
-            winner = get_or_add(match.opponents[match.winner])
-            enumerated[match.round + 1].append(Match([get_or_add(o) for o in match.opponents], winner))
-        else:
-            enumerated[match.round + 1].append(Match([get_or_add(o) for o in match.opponents], "???"))
+    nodes = queue.Queue()
+    nodes.put((tree, 0))
+    while not nodes.empty():
+        node, generation = nodes.get()
+        if isinstance(node, Match):
+            nodes.put((node.t1, generation + 1))
+            nodes.put((node.t2, generation + 1))
+        if isinstance(node, Bye):
+            nodes.put((node.team, generation + 1))
+        if isinstance(node, Team):
+            pass
+        enumerated[generation].append(node)
 
     generations = []
     for idx in sorted(enumerated.keys()):
         generations.append(enumerated[idx])
-    #generations.reverse()
+    generations.reverse()
     return generations

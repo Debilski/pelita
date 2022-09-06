@@ -1,0 +1,32 @@
+---
+
+
+matches:
+  "uid-abc-aaa":
+    stage: round-robin // knockout
+    match-number: 0
+    teams: [tid1, tid0]
+    result:
+    games:
+      -
+      date: ""
+      stored: path
+      final_state: {}
+
+
+
+round-robin:
+  -
+    teams: [tid, tid0]
+    match: "uid-abc-aaa"
+
+knockout:
+  match_tree: {
+    teams: [{
+      teams: [{}, {}],
+      matches: [],
+    }, {
+
+    }]
+    matches: [""]
+  }

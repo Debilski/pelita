@@ -13,6 +13,7 @@ import sys
 import tempfile
 import time
 
+import rich
 import yaml
 import zmq
 
@@ -287,11 +288,11 @@ class Config:
         return self.teams[team]["spec"]
 
     def _print(self, *args, **kwargs):
-        print(*args, **kwargs)
+        rich.print(*args, **kwargs)
         if self.tournament_log_file:
             with open(self.tournament_log_file, 'a') as f:
                 kwargs['file'] = f
-                print(*args, **kwargs)
+                rich.print(*args, **kwargs)
 
     def print(self, *args, **kwargs):
         """Speak while you print. To disable set speak=False.
@@ -601,7 +602,7 @@ def play_round1(config, state):
 
     config.wait_for_keypress()
     config.print()
-    config.print("ROUND 1 (Everybody vs Everybody)")
+    config.print("[b]ROUND 1[/] (Everybody vs Everybody)")
     config.print('================================', speak=False)
     config.print()
 
