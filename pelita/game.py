@@ -50,7 +50,7 @@ class TkViewer:
         if stop_after is not None:
             viewer_args += ["--stop-after", str(stop_after)]
 
-        tkviewer = 'pelita.scripts.pelita_tkviewer'
+        tkviewer = 'pelita.scripts.pelita_qtviewer'
         external_call = [sys.executable,
                         '-m',
                         tkviewer] + viewer_args
