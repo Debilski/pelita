@@ -201,6 +201,12 @@ class CI_Engine:
             self.pretty_print_results(highlight=[self.players[players[0]]['name'], self.players[players[1]]['name']])
             print('------------------------------')
 
+    def score(self, idx):
+        """ Return  the score for player idx."""
+        win, loss, draw = self.get_results(idx)
+        if win + loss + draw == 0:
+            return 0
+        return (win - loss) / (win + loss + draw)
 
     def get_results(self, idx, idx2=None):
         """Get the results so far.
@@ -245,7 +251,7 @@ class CI_Engine:
         """
         win, loss, draw = 0, 0, 0
         p1_name = self.players[idx]['name']
-        p2_name = None if idx2 == None else self.players[idx2]['name']
+        p2_name = None if idx2 is None else self.players[idx2]['name']
         relevant_results = self.dbwrapper.get_results(p1_name, p2_name)
         for p1, p2, r in relevant_results:
             if (idx2 is None and p1_name == p1) or (idx2 is not None and p1_name == p1 and p2_name == p2):
@@ -713,6 +719,33 @@ class DB_Wrapper:
         fatal_errorcount, = self.cursor.fetchone()
 
         return error_count, fatal_errorcount
+
+## numbers of matches played
+
+# SELECT player1,
+#        player2,
+#        sum(c)
+# FROM
+#   (SELECT player1,
+#           player2,
+#           count(*) AS c
+#    FROM games
+#    GROUP BY player1,
+#             player2
+#    UNION ALL SELECT player1,
+#                     player2,
+#                     0 AS c
+#    FROM
+#      (SELECT name AS player1
+#       FROM players)
+#    JOIN
+#      (SELECT name AS player2
+#       FROM players)
+# )
+# GROUP BY player1,
+#          player2
+# ORDER BY c DESC;
+
 
     def get_wins_losses(self, team=None):
         """ Get all wins and losses combined in a table of

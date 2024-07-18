@@ -276,12 +276,17 @@ class ZMQPublisher:
     address : string
         The address which the publisher binds.
     """
-    def __init__(self, address):
+    def __init__(self, address, bind=True):
         self.address = address
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.PUB)
-        self.socket_addr = bind_socket(self.socket, self.address, '--publish')
-        _logger.debug("Bound zmq.PUB to {}".format(self.socket_addr))
+        if bind:
+            self.socket_addr = bind_socket(self.socket, self.address, '--publish')
+            _logger.debug("Bound zmq.PUB to {}".format(self.socket_addr))
+        else:
+            self.socket_addr = self.address
+            self.socket.connect(self.socket_addr)
+            _logger.debug("Connected zmq.PUB to {}".format(self.socket_addr))
 
     def _send(self, action, data):
         info = {'round': data['round'], 'turn': data['turn']}

@@ -1,8 +1,10 @@
 ---
-location: Munich
-date: 2015
+location: Heraklion
+date: 2024
 seed: null
 bonusmatch: True
+speak: True
+speaker: /usr/bin/say -f
 teams:
   - spec: pelita/player/StoppingPlayer
     members:

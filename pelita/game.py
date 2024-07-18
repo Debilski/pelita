@@ -1,12 +1,13 @@
 """This is the game module. Written in 2019 in Born by Carlos and Lisa."""
 
 import logging
+import math
 import os
 from random import Random
 import subprocess
 import sys
 import time
-import math
+import uuid
 from warnings import warn
 
 from . import layout
@@ -242,7 +243,9 @@ def setup_viewers(viewers=None, options=None, print_result=True):
         elif viewer in ('tk', 'tk-no-sync'):
             if not zmq_publisher:
                 zmq_publisher = ZMQPublisher(address='tcp://127.0.0.1')
+                zmq_publisher2 = ZMQPublisher(address='tcp://127.0.0.1:5559', bind=False)
                 viewer_state['viewers'].append(zmq_publisher)
+                viewer_state['viewers'].append(zmq_publisher2)
             if viewer == 'tk':
                 viewer_state['controller'] = setup_controller()
             if viewer_state['controller']:
@@ -313,6 +316,9 @@ def setup_game(team_specs, *, layout_dict, max_rounds=300, layout_name="", seed=
     # Initialize the game state.
 
     game_state = dict(
+        #: UUID
+        game_uuid=str(uuid.uuid4()),
+
         ### The layout attributes
         #: Walls. Set of (int, int)
         walls=set(layout_dict['walls']),

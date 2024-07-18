@@ -1,13 +1,7 @@
 import networkx
 
-from pelita.utils import walls_to_graph
-
 
 def food_eating_player(bot, state):
-    if 'graph' not in state:
-        # first turn, first round
-        state['graph'] = walls_to_graph(bot.walls)
-
     if bot.turn not in state:
         state[bot.turn] = { 'next_food': None }
 
@@ -23,7 +17,7 @@ def food_eating_player(bot, state):
         state[bot.turn]['next_food'] = bot.random.choice(bot.enemy[0].food)
 
     # the first position in the shortest path is always bot.position
-    next_pos = networkx.shortest_path(state['graph'], bot.position, state[bot.turn]['next_food'])[1]
+    next_pos = networkx.shortest_path(bot.graph, bot.position, state[bot.turn]['next_food'])[1]
 
     return next_pos
 
