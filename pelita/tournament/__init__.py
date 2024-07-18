@@ -137,6 +137,8 @@ def call_pelita(team_specs, *, rounds, size, viewer, seed, team_infos=None, writ
     cmd = [sys.executable, '-m', 'pelita.scripts.pelita_main',
            team1, team2,
            '--reply-to', reply_addr,
+           '--stop-at', '0',
+           '--publish-to', 'tcp://127.0.0.1:5559',
            *append_blue,
            *append_red,
            *rounds,
@@ -285,6 +287,10 @@ class Config:
         self.tournament_log_folder = None
         self.tournament_log_file = None
 
+        ctx = zmq.Context()
+        self.socket = ctx.socket(zmq.PUB)
+        self.socket.connect("tcp://127.0.0.1:5559")
+
     @property
     def team_ids(self):
         return self.teams.keys()
@@ -318,6 +324,8 @@ class Config:
         stream = io.StringIO()
         wait = kwargs.pop('wait', 0.5)
         want_speak = kwargs.pop('speak', None)
+        publish_string = {"__action__": "SPEAK", "__data__": " ".join(args)}
+        self.socket.send_json(publish_string)
         if (want_speak is False) or not self.speak:
             self._print(*args, **kwargs)
         else:
@@ -377,6 +385,9 @@ class Config:
             except IndexError:
                 pass
 
+    def clear_page(self):
+        publish_string = {"__action__": "CLEAR"}
+        self.socket.send_json(publish_string)
 
     def wait_for_keypress(self):
         if self.interactive:
@@ -420,6 +431,7 @@ class State:
 
 def present_teams(config):
     config.wait_for_keypress()
+    config.clear_page()
     print("\33[H\33[2J")  # clear the screen
 
     greeting = config.greeting
@@ -503,6 +515,7 @@ def start_match(config, teams, rng, *, shuffle=False, match_id=None):
     config.print('Starting match: '+ config.team_name_group(team1)+' vs ' + config.team_name_group(team2))
     config.print()
     config.wait_for_keypress()
+    config.clear_page()
 
     (final_state, stdout, stderr) = play_game_with_config(config, teams, rng=rng, match_id=match_id)
     try:
@@ -621,6 +634,7 @@ def play_round1(config, state, rng):
     rr_played = state.round1["played"]
 
     config.wait_for_keypress()
+    config.clear_page()
     config.print()
     config.print("ROUND 1 (Everybody vs Everybody)")
     config.print('================================', speak=False)
