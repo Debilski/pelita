@@ -319,6 +319,8 @@ class Config:
         You need the program %s to be able to speak.
         Set wait=X to wait X seconds after speaking."""
         if len(args) == 0:
+            publish_string = {"__action__": "SPEAK", "__data__": " ".join(args)}
+            self.socket.send_json(publish_string)
             self._print()
             return
         stream = io.StringIO()
@@ -385,6 +387,10 @@ class Config:
             except IndexError:
                 pass
 
+    def init_tournament(self):
+        publish_string = {"__action__": "INIT"}
+        self.socket.send_json(publish_string)
+
     def clear_page(self):
         publish_string = {"__action__": "CLEAR"}
         self.socket.send_json(publish_string)
@@ -430,6 +436,7 @@ class State:
 
 
 def present_teams(config):
+    config.init_tournament()
     config.wait_for_keypress()
     config.clear_page()
     print("\33[H\33[2J")  # clear the screen
@@ -664,6 +671,7 @@ def play_round1(config, state, rng):
         winner = start_match_with_replay(config, match, rng=rng, match_id=match_id)
         match_id.next_match()
         config.wait_for_keypress()
+        config.clear_page()
 
         if winner is False or winner is None:
             rr_played.append({ "match": match, "winner": False })
@@ -750,5 +758,6 @@ def play_round2(config, teams, state, rng):
                 match_id.next_match()
 
     config.wait_for_keypress()
+    config.clear_page()
 
     return last_match.winner
