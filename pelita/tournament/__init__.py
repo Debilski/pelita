@@ -469,6 +469,7 @@ def set_name(team):
 
 
 def play_game_with_config(config, teams, rng, *, match_id=None):
+    config.clear_page()
     team1, team2 = teams
 
     if config.tournament_log_folder:
@@ -746,6 +747,7 @@ def play_round2(config, teams, state, rng):
                     winner = start_deathmatch(config, t1_id, t2_id, rng=rng, match_id=match_id)
                     match.winner = winner
 
+                    config.clear_page()
                     config.print(knockout_mode.print_knockout(last_match, config.team_name, highlight=[match]), speak=False)
 
                     state.round2["tournament"] = tournament
