@@ -17,3 +17,6 @@ class PlayerDisconnected(FatalException):
 class NoFoodWarning(Warning):
     """ Warns when a layout has no food during setup. """
     pass
+
+
+# GameOverError (raised from game when match is game over)

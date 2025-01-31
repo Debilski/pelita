@@ -334,7 +334,8 @@ class PelitaServer:
 
             # Send a reply to the requester (that the process has started)
             # Otherwise they might already start querying for the team name
-            self.router_sock.send_multipart([dealer_id, b"OK"])
+            ## TODO: Still needed?
+            # self.router_sock.send_multipart([dealer_id, b"OK"])
 
         else:
             _logger.info("Unknown incoming DEALER and not a request.")

@@ -27,10 +27,13 @@ PELITA_PORT = 41736
 # Request
 # {__uuid__, __action__, __data__}
 
+# Status
+# {__status__, __data__}
+
 # Reply
 # {__uuid__, __return__}
 
-# Error
+# Error Reply
 # {__uuid__, __error__, __error_msg__}
 
 
@@ -41,6 +44,8 @@ class ZMQUnreachablePeer(Exception):
 class ZMQReplyTimeout(Exception):
     """ Is raised when an ZMQ socket does not answer in time. """
 
+
+# TODO: ZMQClientError could probably be replaced
 
 class ZMQClientError(Exception):
     """ Used to propagate errors from the client.
@@ -99,6 +104,16 @@ def json_default_handler(o):
     # we don’t know the type: raise a Type error
     raise TypeError("Cannot convert %r of type %s to json" % (o, type(o)))
 
+import enum
+class ConnectionState(enum.Enum):
+    UNCONNECTED = 1
+    AWAIT_ACK = 2
+    CONNECTED = 3
+    CLOSED = 4
+
+    # CLOSE_WAIT??
+    ERR = 5
+
 
 class ZMQConnection:
     """ This class is supposed to ease request–reply connections
@@ -127,7 +142,12 @@ class ZMQConnection:
     pollout : zmq poller
         Poller for outgoing connections
     """
-    def __init__(self, socket):
+
+    # TODO: Receive status+error messages
+    # Status messages may update some attributes
+    # Error messages should be stored and close the connection
+
+    def __init__(self, socket: zmq.Socket):
         self.socket = socket
 
         self.socket.setsockopt(zmq.LINGER, 0)
@@ -139,7 +159,9 @@ class ZMQConnection:
         self.pollout = zmq.Poller()
         self.pollout.register(socket, zmq.POLLOUT)
 
-    def send(self, action, data, timeout=None):
+        self.state = ConnectionState.UNCONNECTED
+
+    def send_req(self, action, data, timeout=None):
         """ Sends a message or request `action`
         and attached data to the socket and returns the
         message id that is needed to receive the reply.
@@ -148,21 +170,26 @@ class ZMQConnection:
         if timeout is None:
             timeout = DEAD_CONNECTION_TIMEOUT
 
+        print(self.state)
+
         msg_id = str(uuid.uuid4())
         _logger.debug("---> %r [%s]", action, msg_id)
 
         # Check before sending that the socket can receive
         socks = dict(self.pollout.poll(timeout * 1000))
-        if socks.get(self.socket) == zmq.POLLOUT:
+        if self.socket in socks and socks[self.socket] == zmq.POLLOUT:
             # I think we need to set NOBLOCK here, else we may run into a
             # race condition if a connection was closed between poll and send.
             # NOBLOCK should raise, so we can catch that
             message_obj = {"__uuid__": msg_id, "__action__": action, "__data__": data}
             json_message = json.dumps(message_obj, cls=SetEncoder)
+
+            # TODO: delete
+            print(json_message)
             try:
                 self.socket.send_unicode(json_message, flags=zmq.NOBLOCK)
             except zmq.ZMQError as e:
-                _logger.info("Could not send message. Assume socket is unavailable. %r", e)
+                _logger.info("Could not send message. Socket is unavailable. %r", e)
                 raise ZMQUnreachablePeer()
         else:
             raise ZMQUnreachablePeer()
@@ -187,28 +214,59 @@ class ZMQConnection:
         try:
             py_obj = json.loads(json_message)
         except ValueError:
-            _logger.warning('Received non-json message from self. Triggering a timeout.')
+            _logger.warning('Received non-json message.')
             raise ZMQReplyTimeout()
 
-        try:
+        if '__error__' in py_obj:
             error_type = py_obj['__error__']
             error_message = py_obj.get('__error_msg__', '')
             _logger.warning(f'Received error reply ({error_type}): {error_message}. Closing socket.')
             self.socket.close()
+
+            self.state = ConnectionState.CLOSED
+
             raise ZMQClientError(error_message, error_type)
-        except KeyError:
-            pass
 
-        try:
-            msg_id = py_obj["__uuid__"]
-        except KeyError:
-            msg_id = None
-            _logger.warning('__uuid__ missing in message.')
+        if '__uuid__' in py_obj:
+            msg_id = py_obj['__uuid__']
+            msg_return = py_obj.get("__return__")
+            _logger.debug("<--- %r [%s]", msg_return, msg_id)
 
-        msg_return = py_obj.get("__return__")
+            return msg_id, msg_return
 
-        _logger.debug("<--- %r [%s]", msg_return, msg_id)
-        return msg_id, msg_return
+        if '__status__' in py_obj:
+            msg_ack = py_obj['__status__'] # == 'ok'
+            msg_data = py_obj.get('__data__')
+            _logger.debug("<--- %r %r", msg_ack, msg_data)
+
+            self.state = ConnectionState.CONNECTED
+
+            return None, msg_data
+
+        print("NO MATCH", py_obj)
+
+        return None, None
+
+
+    def recv_status(self, timeout):
+        """ Receive the next message on the socket.
+
+        Returns
+        -------
+        status
+            The message status
+
+        Raises
+        ------
+        ZMQReplyTimeout
+            if the message cannot be parsed from JSON
+        ZMQClientError
+            if an error message is returned
+        """
+        status = self.recv_timeout(None, timeout)
+
+        return status
+
 
     def recv_timeout(self, expected_id, timeout):
         """ Waits `timeout` seconds for a reply with msg_id `expected_id`.
@@ -226,15 +284,8 @@ class ZMQConnection:
         ZMQConnectionError
             if an error message is returned
         """
-        # special case for no timeout
-        # just loop until we receive the correct reply
-        if timeout is None:
-            while True:
-                msg_id, reply = self._recv()
-                if msg_id == expected_id:
-                    return reply
-
-        # normal timeout handling
+        if self.state == ConnectionState.CLOSED:
+            return
 
         time_now = time.monotonic()
         # calculate until when it may take
@@ -351,15 +402,7 @@ class Controller:
                 if action in expected_actions:
                     return action
                 _logger.warning('Unexpected action %r. (Expected: %s) Ignoring.', action, ", ".join(expected_actions))
-                continue
 
-
-    def recv_start(self, timeout=None):
-        """ Waits `timeout` seconds for start message.
-
-        Returns `True`, when the message arrives, `False` when an exit
-        message arrives or a timeout occurs.
-        """
 
 
 def setup_controller(zmq_context=None):

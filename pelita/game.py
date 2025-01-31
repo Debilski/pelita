@@ -438,6 +438,7 @@ def setup_game(team_specs, *, layout_dict, max_rounds=300, rng=None,
         controller=viewer_state['controller']
     )
 
+
     # Wait until the controller tells us that it is ready
     # We then can send the initial maze
     # This call *blocks* until the controller replies
@@ -480,6 +481,32 @@ def setup_teams(team_specs, game_state, store_output=False, allow_exceptions=Fal
         team, zmq_context = make_team(team_spec, idx=idx, zmq_context=zmq_context, store_output=store_output, team_name=game_state['team_names'][idx])
         teams.append(team)
 
+    for idx, team in enumerate(teams):
+        try:
+            state = team.wait_ready()
+        except (FatalException, PlayerTimeout) as e:
+            print("ERR", e)
+            # TODO: Not sure if PlayerTimeout should let the other payer win.
+            # It could simply be a network problem.
+            if allow_exceptions: raise
+            exception_event = {
+                'type': e.__class__.__name__,
+                'description': str(e),
+                'turn': idx,
+                'round': None,
+            }
+            game_state['fatal_errors'][idx].append(exception_event)
+            if len(e.args) > 1:
+                game_print(idx, f"{type(e).__name__} ({e.args[0]}): {e.args[1]}")
+                team_name = f"%%%{e.args[0]}%%%"
+            else:
+                game_print(idx, f"{type(e).__name__}: {e}")
+                team_name = "%%%error%%%"
+        # team_names.append(team_name)
+
+    # set team names in game_state; not in Team() class
+    print(game_state)
+
     # Send the initial state to the teams and await the team name (if the teams are local, the name can be get from the game_state directly
     team_names = []
     for idx, team in enumerate(teams):
@@ -513,6 +540,9 @@ def setup_teams(team_specs, game_state, store_output=False, allow_exceptions=Fal
 
 
 def request_new_position(game_state):
+
+    # TODO: Return type should be BotReply (including move, say & potential error)
+
     team = game_state['turn'] % 2
     move_fun = game_state['teams'][team]
 
@@ -521,7 +551,10 @@ def request_new_position(game_state):
 
     start_time = time.monotonic()
 
-    new_position = move_fun.get_move(bot_state)
+    try:
+        new_position = move_fun.get_move(bot_state)
+    except:
+        ...
 
     duration = time.monotonic() - start_time
     # update the team_time
@@ -622,7 +655,6 @@ def prepare_bot_state(game_state, idx=None):
             'shape': game_state['shape'], # only in initial round
             'seed': seed # only used in set_initial phase
         })
-
     return bot_state
 
 
@@ -714,14 +746,19 @@ def play_turn(game_state, allow_exceptions=False):
 
     # request a new move from the current team
     try:
+
+        # TODO: All validation should be done in request_new_position
+        # TODO: All errors/timeouts from get_move should be caught in request_new_position
+
         position_dict = request_new_position(game_state)
+
         if "error" in position_dict:
             error_type, error_string = position_dict['error']
             raise FatalException(f"Exception in client ({error_type}): {error_string}")
-        try:
-            position = tuple(position_dict['move'])
-        except TypeError as e:
-            raise NonFatalException(f"Type error {e}")
+        # try:
+        #     position = tuple(position_dict['move'])
+        # except TypeError as e:
+        #     raise NonFatalException(f"Type error {e}")
 
         if position_dict.get('say'):
             game_state['say'][game_state['turn']] = position_dict['say']

@@ -1,4 +1,5 @@
 
+import contextlib
 import logging
 import os
 import subprocess
@@ -7,6 +8,7 @@ import traceback
 from io import StringIO
 from pathlib import Path
 from random import Random
+import typing
 from urllib.parse import urlparse
 
 import networkx as nx
@@ -90,8 +92,6 @@ def walls_to_graph(walls, shape=None):
                         graph.add_edge((x, y), neighbor)
     return graph
 
-
-
 class Team:
     """
     Wraps a move function and forwards it the `set_initial`
@@ -113,8 +113,18 @@ class Team:
         the team’s move function
     team_name :
         the name of the team (optional)
+
+    Raises
+    ------
+    TypeError : Move is not a function or team_name is not a string
     """
-    def __init__(self, team_move, *, team_name=""):
+    def __init__(self, team_move: typing.Callable[[typing.Any, typing.Any], typing.Tuple[int, int]], *, team_name=""):
+        if not callable(team_move):
+            raise TypeError("move is not a function")
+
+        if not isinstance(team_name, str):
+            raise TypeError("TEAM_NAME is not a string")
+
         self._team_move = team_move
         self.team_name = team_name
 
@@ -228,7 +238,7 @@ class Team:
                 if len(move) != 2:
                     raise ValueError(f"Function move did not return a valid position: got {move} instead.")
             except TypeError:
-                # Convert to ValueError
+                # If move cannot take len, we get a type error; convert it to a ValueError
                 raise ValueError(f"Function move did not return a valid position: got {move} instead.") from None
         except Exception as e:
             # Our client had an exception. We print a traceback and
@@ -252,32 +262,28 @@ class Team:
     def __repr__(self):
         return f'Team({self._team_move!r}, {self.team_name!r})'
 
+## TODO:
+# Team -> Team
 
-class RemoteTeam:
-    """ Start a child process with the given `team_spec` and handle
-    communication with it through a zmq.PAIR connection.
-
-    It also does some basic checks for correct return values and tries to
-    terminate the child process once it is not needed anymore.
-
-    Parameters
-    ----------
-    team_spec
-        The string to pass as a command line argument to pelita_player
-        or the address of a remote player
-    team_name
-        Overrides the team name
-    zmq_context
-        A zmq_context (if None, a new one will be created)
-    idx
-        The team index (currently only used to specify the team’s color)
-    store_output
-        If store_output is a string it will be interpreted as a path to a
-        directory where to store stdout and stderr for the client processes.
-        It helps in debugging issues with the clients.
-        In the special case of store_output==subprocess.DEVNULL, stdout of
-        the remote clients will be suppressed.
-    """
+# Split class RemoteTeam in two:
+# One class for handling connections to a server-run Pelita client
+# One class that starts its own subprocess and owns it
+#
+# In the first case, a connection is started with a zmq message
+# The game code (setup_teams) is then responsible for awaiting
+# the success message
+#
+# In the second case, the remote client needs to send a success message
+# after it has started. The game code (setup_teams) is responsible for awaiting this message
+#
+# With the Ok message that the process has started, the team name should be included.
+#
+# The set initial req–rep should be made separately. This ensures that set initial includes the team names
+# and the team names do not need to be send during regular move requests.
+#
+# Rename set_initial -> start_game
+#
+class SubprocessTeam:
     def __init__(self, team_spec, *, team_name=None, zmq_context=None, idx=None, store_output=False):
         zmq_context = default_zmq_context(zmq_context)
 
@@ -287,60 +293,29 @@ class RemoteTeam:
         #: Default timeout for a request, unless specified in the game_state
         self._request_timeout = 3
 
-        if team_spec.startswith('pelita://'):
-            # We connect to a remote player that is listening
-            # on the given team_spec address.
-            # We create a new DEALER socket and send a single
-            # REQUEST message to the remote address.
-            # The remote player will then create a new instance
-            # of a player and forward all of our zmq traffic
-            # to that player.
+        # TODO: State machine -- or add to ZMQConnection?
+        self._state = ""
 
-            # given a url pelita://hostname:port/path we extract hostname and port and
-            # convert it to tcp://hostname:port that we use for the zmq connection
-            parsed_url = urlparse(team_spec)
-            if parsed_url.port:
-                port = parsed_url.port
-            else:
-                port = PELITA_PORT
-            send_addr = f"tcp://{parsed_url.hostname}:{port}"
-            address = "tcp://*"
-            self.bound_to_address = address
+        self.team_name = None
 
-            socket = zmq_context.socket(zmq.DEALER)
-            socket.setsockopt(zmq.LINGER, 0)
-            socket.connect(send_addr)
-            _logger.info("Connecting zmq.DEALER to remote player at {}.".format(send_addr))
+        # We bind to a local tcp port with a zmq PAIR socket
+        # and start a new subprocess of pelita_player.py
+        # that includes the address of that socket and the
+        # team_spec as command line arguments.
+        # The subprocess will then connect to this address
+        # and load the team.
 
-            socket.send_json({"REQUEST": team_spec})
-            WAIT_TIMEOUT = 5000
-            incoming = socket.poll(timeout=WAIT_TIMEOUT)
-            if incoming == zmq.POLLIN:
-                _ok = socket.recv()
-            else:
-                # Server did not respond
-                raise PlayerTimeout()
-            self.proc = None
-
+        socket = zmq_context.socket(zmq.PAIR)
+        port = socket.bind_to_random_port('tcp://localhost')
+        self.bound_to_address = f"tcp://localhost:{port}"
+        if idx == 0:
+            color='blue'
+        elif idx == 1:
+            color='red'
         else:
-            # We bind to a local tcp port with a zmq PAIR socket
-            # and start a new subprocess of pelita_player.py
-            # that includes the address of that socket and the
-            # team_spec as command line arguments.
-            # The subprocess will then connect to this address
-            # and load the team.
-
-            socket = zmq_context.socket(zmq.PAIR)
-            port = socket.bind_to_random_port('tcp://*')
-            self.bound_to_address = f"tcp://localhost:{port}"
-            if idx == 0:
-                color='blue'
-            elif idx == 1:
-                color='red'
-            else:
-                color=''
-            self.proc = self._call_pelita_player(team_spec, self.bound_to_address,
-                                                 color=color, store_output=store_output)
+            color=''
+        self.proc = self._call_pelita_player(team_spec, self.bound_to_address,
+                                             color=color, store_output=store_output)
 
         self.zmqconnection = ZMQConnection(socket)
 
@@ -373,28 +348,168 @@ class RemoteTeam:
         else:
             return (subprocess.Popen(external_call), None, None)
 
-    @property
-    def team_name(self):
-        if self._team_name is not None:
-            return self._team_name
+    def wait_ready(self):
+        with self.handle_remote_call():
+            msg = self.zmqconnection.recv_status(10)
+            print("XXX", msg)
+            self.team_name = msg.get('team_name')
 
+    @contextlib.contextmanager
+    def handle_remote_call(self):
         try:
-            msg_id = self.zmqconnection.send("team_name", {})
-            team_name = self.zmqconnection.recv_timeout(msg_id, self._request_timeout)
+            yield
+        except ZMQReplyTimeout:
+            # answer did not arrive in time
+            raise PlayerTimeout()
+        except ZMQUnreachablePeer:
+            # could not send: remote connection is closed
+            raise PlayerDisconnected()
+        except ZMQClientError as e:
+            error_message = e.message
+            error_type = e.error_type
+            _logger.warning(f"Client connection failed ({error_type}): {error_message}")
+            raise PlayerDisconnected(*e.args) from None
+
+
+    def set_initial(self, team_id, game_state):
+        with self.handle_remote_call():
+            timeout_length = game_state['timeout_length']
+            msg_id = self.zmqconnection.send_req("set_initial", {"team_id": team_id,
+                                                    "game_state": game_state})
+            team_name = self.zmqconnection.recv_timeout(msg_id, timeout_length)
             if team_name:
                 self._team_name = team_name
             return team_name
-        except ZMQReplyTimeout:
-            _logger.info("Detected a timeout, returning a string nonetheless.")
-            return "%error%"
+
+    def get_move(self, game_state):
+        timeout_length = game_state['timeout_length']
+        with self.handle_remote_call():
+            msg_id = self.zmqconnection.send_req("get_move", {"game_state": game_state})
+            reply = self.zmqconnection.recv_timeout(msg_id, timeout_length)
+            # make sure it is a dict
+            reply = dict(reply)
+            if "error" in reply:
+                return reply
+            # make sure that the move is a tuple
+            reply["move"] = tuple(reply.get("move"))
+            # TODO: handle ValueError
+            return reply
+
+    def _exit(self, game_state=None):
+        # We only want to exit once.
+        if getattr(self, '_sent_exit', False):
+            return
+
+        if game_state:
+            payload = {'game_state': game_state}
+        else:
+            payload = {}
+
+        try:
+            # TODO: make zmqconnection stateful. set flag when already disconnected
+            # For now, we simply check the state of the socket so that we do not send
+            # over an already closed socket.
+            if self.zmqconnection.socket.closed:
+                return
+            # TODO: Include final state with exit message
+            self.zmqconnection.send_req("exit", payload, timeout=1)
+            self._sent_exit = True
         except ZMQUnreachablePeer:
-            _logger.info("Detected a DeadConnection, returning a string nonetheless.")
-            return "%error%"
+            _logger.info("Remote Player %r is already dead during exit. Ignoring.", self)
+
+    def __del__(self):
+        try:
+            self._exit()
+            if self.proc:
+                self.proc[0].terminate()
+        except AttributeError:
+            # in case we exit before self.proc or self.zmqconnection have been set
+            pass
+
+    def __repr__(self):
+        team_name = f" ({self._team_name})" if self._team_name else ""
+        return f"SubprocessTeam<{self._team_spec}{team_name} on {self.bound_to_address}>"
+
+
+class RemoteTeam:
+    """ Start a child process with the given `team_spec` and handle
+    communication with it through a zmq.PAIR connection.
+
+    It also does some basic checks for correct return values and tries to
+    terminate the child process once it is not needed anymore.
+
+    Parameters
+    ----------
+    team_spec
+        The string to pass as a command line argument to pelita_player
+        or the address of a remote player
+    team_name
+        Overrides the team name
+    zmq_context
+        A zmq_context (if None, a new one will be created)
+    idx
+        The team index (currently only used to specify the team’s color)
+    store_output
+        If store_output is a string it will be interpreted as a path to a
+        directory where to store stdout and stderr for the client processes.
+        It helps in debugging issues with the clients.
+        In the special case of store_output==subprocess.DEVNULL, stdout of
+        the remote clients will be suppressed.
+    """
+    def __init__(self, team_spec, *, team_name=None, zmq_context=None, idx=None, store_output=False):
+        if zmq_context is None:
+            zmq_context = zmq.Context()
+
+        self._team_spec = team_spec
+        self._team_name = team_name
+
+        #: Default timeout for a request, unless specified in the game_state
+        self._request_timeout = 3
+
+
+        # We connect to a remote player that is listening
+        # on the given team_spec address.
+        # We create a new DEALER socket and send a single
+        # REQUEST message to the remote address.
+        # The remote player will then create a new instance
+        # of a player and forward all of our zmq traffic
+        # to that player.
+
+        # given a url pelita://hostname:port/path we extract hostname and port and
+        # convert it to tcp://hostname:port that we use for the zmq connection
+        parsed_url = urlparse(team_spec)
+        if parsed_url.port:
+            port = parsed_url.port
+        else:
+            port = PELITA_PORT
+        send_addr = f"tcp://{parsed_url.hostname}:{port}"
+        self.bound_to_address = send_addr
+
+        socket = zmq_context.socket(zmq.DEALER)
+        socket.setsockopt(zmq.LINGER, 0)
+        socket.connect(send_addr)
+        _logger.info("Connecting zmq.DEALER to remote player at {}.".format(send_addr))
+
+        socket.send_json({"REQUEST": team_spec})
+        # WAIT_TIMEOUT = 5000
+        # incoming = socket.poll(timeout=WAIT_TIMEOUT)
+        # if incoming == zmq.POLLIN:
+        #     ok = socket.recv()
+        # else:
+        #     # Server did not respond
+        #     raise PlayerTimeout()
+        # self.proc = None
+
+        self.zmqconnection = ZMQConnection(socket)
+
+    def wait_ready(self):
+        msg = self.zmqconnection.recv_status(10)
+        print(msg)
 
     def set_initial(self, team_id, game_state):
         timeout_length = game_state['timeout_length']
         try:
-            msg_id = self.zmqconnection.send("set_initial", {"team_id": team_id,
+            msg_id = self.zmqconnection.send_req("set_initial", {"team_id": team_id,
                                                     "game_state": game_state})
             team_name = self.zmqconnection.recv_timeout(msg_id, timeout_length)
             if team_name:
@@ -414,7 +529,7 @@ class RemoteTeam:
     def get_move(self, game_state):
         timeout_length = game_state['timeout_length']
         try:
-            msg_id = self.zmqconnection.send("get_move", {"game_state": game_state})
+            msg_id = self.zmqconnection.send_req("get_move", {"game_state": game_state})
             reply = self.zmqconnection.recv_timeout(msg_id, timeout_length)
             # make sure it is a dict
             reply = dict(reply)
@@ -452,7 +567,7 @@ class RemoteTeam:
             if self.zmqconnection.socket.closed:
                 return
             # TODO: Include final state with exit message
-            self.zmqconnection.send("exit", payload, timeout=1)
+            self.zmqconnection.send_req("exit", payload, timeout=1)
             self._sent_exit = True
         except ZMQUnreachablePeer:
             _logger.info("Remote Player %r is already dead during exit. Ignoring.", self)
@@ -503,10 +618,14 @@ def make_team(team_spec, team_name=None, zmq_context=None, idx=None, store_outpu
             team_name = f'local-team ({team_spec.__name__})'
         team_player = Team(team_spec, team_name=team_name)
     elif isinstance(team_spec, str):
-        _logger.info("Making a remote team for %s", team_spec)
         # set up the zmq connections and build a RemoteTeam
         zmq_context = default_zmq_context(zmq_context)
-        team_player = RemoteTeam(team_spec=team_spec, zmq_context=zmq_context, idx=idx, store_output=store_output)
+        if team_spec.startswith('pelita://'):
+            _logger.info("Making a remote team for %s", team_spec)
+            team_player = RemoteTeam(team_spec=team_spec, zmq_context=zmq_context, idx=idx, store_output=store_output)
+        else:
+            _logger.info("Making a subprocess team for %s", team_spec)
+            team_player = SubprocessTeam(team_spec=team_spec, zmq_context=zmq_context, idx=idx, store_output=store_output)
     else:
         raise TypeError(f"Not possible to create team from {team_spec} (wrong type).")
 

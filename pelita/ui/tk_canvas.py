@@ -796,8 +796,8 @@ class TkApplication:
 
         center = self.ui_header_canvas.winfo_width() // 2
 
-        left_name = game_state["team_names"][0]
-        right_name = game_state["team_names"][1]
+        left_name = game_state["team_names"][0] or '???'
+        right_name = game_state["team_names"][1] or '???'
 
         left_score = game_state["score"][0]
         right_score = game_state["score"][1]
