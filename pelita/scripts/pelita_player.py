@@ -97,7 +97,7 @@ def player_handle_request(socket, team, team_name_override=False, silent_bots=Fa
     try:
         json_message = socket.recv_unicode()
         py_obj = json.loads(json_message)
-        msg_id = py_obj["__uuid__"]
+        msg_id = py_obj.get("__uuid__") # if an uuid is given, we must reply with a value
         action = py_obj["__action__"]
         data = py_obj["__data__"]
         _logger.debug("<o-- %r [%s]", action, msg_id)
@@ -171,15 +171,16 @@ def player_handle_request(socket, team, team_name_override=False, silent_bots=Fa
         return False
 
     finally:
-        # we use our own json_default_handler
-        # to automatically convert numpy ints to json
-        json_message = json.dumps(message_obj, default=json_default_handler)
-        # return the message
-        socket.send_unicode(json_message)
-        if '__error__' in message_obj:
-            _logger.warning("o-!> %r [%s]", message_obj['__error__'], msg_id)
-        else:
-            _logger.debug("o--> %r [%s]", message_obj['__return__'], msg_id)
+        if msg_id is not None:
+            # we use our own json_default_handler
+            # to automatically convert numpy ints to json
+            json_message = json.dumps(message_obj, default=json_default_handler)
+            # return the message
+            socket.send_unicode(json_message)
+            if '__error__' in message_obj:
+                _logger.warning("o-!> %r [%s]", message_obj['__error__'], msg_id)
+            else:
+                _logger.debug("o--> %r [%s]", message_obj['__return__'], msg_id)
 
 
 def check_team_name(name):

@@ -161,10 +161,9 @@ class ZMQConnection:
 
         self.state = ConnectionState.UNCONNECTED
 
-    def send_req(self, action, data, timeout=None):
+    def send(self, action, data, msg_id=None, timeout=None):
         """ Sends a message or request `action`
-        and attached data to the socket and returns the
-        message id that is needed to receive the reply.
+        and attached data to the socket.
         """
 
         if timeout is None:
@@ -172,8 +171,12 @@ class ZMQConnection:
 
         print(self.state)
 
-        msg_id = str(uuid.uuid4())
-        _logger.debug("---> %r [%s]", action, msg_id)
+        if msg_id is not None:
+            message_obj = {"__uuid__": msg_id, "__action__": action, "__data__": data}
+            _logger.debug("---> %r [%s]", action, msg_id)
+        else:
+            message_obj = {"__action__": action, "__data__": data}
+            _logger.debug("---> %r", action)
 
         # Check before sending that the socket can receive
         socks = dict(self.pollout.poll(timeout * 1000))
@@ -181,19 +184,27 @@ class ZMQConnection:
             # I think we need to set NOBLOCK here, else we may run into a
             # race condition if a connection was closed between poll and send.
             # NOBLOCK should raise, so we can catch that
-            message_obj = {"__uuid__": msg_id, "__action__": action, "__data__": data}
             json_message = json.dumps(message_obj, cls=SetEncoder)
 
             # TODO: delete
             print(json_message)
             try:
                 self.socket.send_unicode(json_message, flags=zmq.NOBLOCK)
+                print("check!")
             except zmq.ZMQError as e:
                 _logger.info("Could not send message. Socket is unavailable. %r", e)
                 raise ZMQUnreachablePeer()
         else:
             raise ZMQUnreachablePeer()
         return msg_id
+
+    def send_req(self, action, data, timeout=None):
+        """ Sends a message or request `action`
+        and attached data to the socket and returns the
+        message id that is needed to receive the reply.
+        """
+        msg_id = str(uuid.uuid4())
+        return self.send(action=action, data=data, msg_id=msg_id, timeout=timeout)
 
     def _recv(self):
         """ Receive the next message on the socket.

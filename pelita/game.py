@@ -485,7 +485,7 @@ def setup_teams(team_specs, game_state, store_output=False, allow_exceptions=Fal
         try:
             state = team.wait_ready()
         except (FatalException, PlayerTimeout) as e:
-            print("ERR", e)
+            print("ERR", str(e), repr(e))
             # TODO: Not sure if PlayerTimeout should let the other payer win.
             # It could simply be a network problem.
             if allow_exceptions: raise
@@ -496,6 +496,7 @@ def setup_teams(team_specs, game_state, store_output=False, allow_exceptions=Fal
                 'round': None,
             }
             game_state['fatal_errors'][idx].append(exception_event)
+
             if len(e.args) > 1:
                 game_print(idx, f"{type(e).__name__} ({e.args[0]}): {e.args[1]}")
                 team_name = f"%%%{e.args[0]}%%%"
@@ -545,20 +546,23 @@ def request_new_position(game_state):
 
     team = game_state['turn'] % 2
     move_fun = game_state['teams'][team]
+    team_id = game_state['turn'] % 2
+    bot_turn = game_state['turn'] // 2
+    team = game_state['teams'][team_id]
 
     bot_state = prepare_bot_state(game_state)
 
 
     start_time = time.monotonic()
 
-    try:
-        new_position = move_fun.get_move(bot_state)
-    except:
-        ...
+    # try:
+    new_position = team.get_move(bot_state)
+    # except:
+        # ...
 
     duration = time.monotonic() - start_time
     # update the team_time
-    game_state['team_time'][team] += duration
+    game_state['team_time'][team_id] += duration
 
     return new_position
 
@@ -750,23 +754,37 @@ def play_turn(game_state, allow_exceptions=False):
         # TODO: All validation should be done in request_new_position
         # TODO: All errors/timeouts from get_move should be caught in request_new_position
 
+        # TODO: Team class could already handle invalid moves and take a random guess
+
         position_dict = request_new_position(game_state)
+
+
+        print(position_dict)
 
         if "error" in position_dict:
             error_type, error_string = position_dict['error']
             raise FatalException(f"Exception in client ({error_type}): {error_string}")
-        # try:
-        #     position = tuple(position_dict['move'])
-        # except TypeError as e:
-        #     raise NonFatalException(f"Type error {e}")
+        try:
+            # Important! We must ensure that the move is a dict (it may be a list!)
+            position = tuple(position_dict['move'])
+        except TypeError as e:
+            raise FatalException(f"Type error {e}")
 
         if position_dict.get('say'):
             game_state['say'][game_state['turn']] = position_dict['say']
         else:
             game_state['say'][game_state['turn']] = ""
     except FatalException as e:
+        # TODO: Fix allow_exceptions when wrong value is returned. Also add tests!
+        # Raise more sensible exceptions than generic FatalExeption maybe?
+
+        # TODO: allow_exceptions should only raise at the end of this function
+        # or there should be some finally: cleanup
+
         if allow_exceptions:
             raise
+
+
         # FatalExceptions (such as PlayerDisconnect) should immediately
         # finish the game
         exception_event = {
@@ -779,9 +797,7 @@ def play_turn(game_state, allow_exceptions=False):
         position = None
         game_print(turn, f"{type(e).__name__}: {e}")
     except NonFatalException as e:
-        if allow_exceptions:
-            raise
-        # NonFatalExceptions (such as Timeouts and ValueErrors in the JSON handling)
+        # NonFatalExceptions (such as Timeouts)
         # are collected and added to team_errors
         exception_event = {
             'type': e.__class__.__name__,

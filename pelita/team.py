@@ -229,31 +229,63 @@ class Team:
 
             mybot.track = self._bot_track[idx][:]
 
+        move = self.do_move(self._team_move, team[me._bot_turn], self._state)
+        if "error" not in move:
+            move["say"] = me._say
+        return move
+
+    @staticmethod
+    def do_move(move_fn, bot: "Bot", state):
         try:
             # request a move from the current bot
-            move = self._team_move(team[me._bot_turn], self._state)
-
-            # check that the returned value is a position tuple
-            try:
-                if len(move) != 2:
-                    raise ValueError(f"Function move did not return a valid position: got {move} instead.")
-            except TypeError:
-                # If move cannot take len, we get a type error; convert it to a ValueError
-                raise ValueError(f"Function move did not return a valid position: got {move} instead.") from None
+            move = move_fn(bot, state)
         except Exception as e:
             # Our client had an exception. We print a traceback and
             # return the type of the exception to the server.
             # If this is a remote player, then this will be detected in pelita_player
             # and pelita_player will close the connection automatically.
-            traceback.print_exc()
+
+            # Stacktrace is not needed, when we raise the ValueError above!
+            # from rich.console import Console
+            # console = Console()
+
+            # if bot.is_blue:
+                # console.print(f"Team [blue]{bot.team_name}[/] caused an exception:")
+            # else:
+                # console.print(f"Team [red]{bot.team_name}[/] caused an exception:")
+
+            #console.print_exception(show_locals=True) #, suppress=["pelita"])
+
+            try:
+                import _colorize
+                colorize = _colorize.can_colorize()
+            except (ImportError, AttributeError):
+                colorize = False
+            traceback.print_exception(sys.exception(), limit=None, file=None, chain=True, colorize=colorize)
+
+
             return {
                 "error": (type(e).__name__, str(e)),
             }
 
-        return {
-            "move": move,
-            "say": me._say
-        }
+        # check that the returned value is a position tuple
+        try:
+            if len(move) == 2:
+                return { "move": move }
+
+        except TypeError:
+            pass
+
+        error = ("ValueError", f"Function move did not return a valid position: got {move} instead.")
+
+        from rich.console import Console
+        console = Console()
+        console.print(f"[b][red]{error[0]}[/red][/b]: {error[1]}")
+
+        # If move cannot take len, we get a type error; convert it to a ValueError
+        return { "error": error }
+
+
 
     def _exit(self, game_state=None):
         """ Dummy function. Only needed for `RemoteTeam`. """
@@ -314,8 +346,8 @@ class SubprocessTeam:
             color='red'
         else:
             color=''
-        self.proc = self._call_pelita_player(team_spec, self.bound_to_address,
-                                             color=color, store_output=store_output)
+        self.proc, self.stdout_path, self.stderr_path = self._call_pelita_player(team_spec, self.bound_to_address,
+                                                            color=color, store_output=store_output)
 
         self.zmqconnection = ZMQConnection(socket)
 
@@ -337,14 +369,14 @@ class SubprocessTeam:
             return (subprocess.Popen(external_call, stdout=store_output), None, None)
         elif store_output:
             store_path = Path(store_output)
-            stdout = (store_path / f"{color or team_spec}.out").open('w')
-            stderr = (store_path / f"{color or team_spec}.err").open('w')
+            stdout_path = (store_path / f"{color or team_spec}.out")
+            stderr_path = (store_path / f"{color or team_spec}.err")
 
             # We must run in unbuffered mode to enforce flushing of stdout/stderr,
             # otherwise we may lose some of what is printed
-            proc = subprocess.Popen(external_call, stdout=stdout, stderr=stderr,
+            proc = subprocess.Popen(external_call, stdout=stdout_path.open('w'), stderr=stderr_path.open('w'),
                                     env=dict(os.environ, PYTHONUNBUFFERED='x'))
-            return (proc, stdout, stderr)
+            return (proc, stdout_path, stderr_path)
         else:
             return (subprocess.Popen(external_call), None, None)
 
@@ -374,20 +406,14 @@ class SubprocessTeam:
     def set_initial(self, team_id, game_state):
         with self.handle_remote_call():
             timeout_length = game_state['timeout_length']
-            msg_id = self.zmqconnection.send_req("set_initial", {"team_id": team_id,
+            self.zmqconnection.send("set_initial", {"team_id": team_id,
                                                     "game_state": game_state})
-            team_name = self.zmqconnection.recv_timeout(msg_id, timeout_length)
-            if team_name:
-                self._team_name = team_name
-            return team_name
 
     def get_move(self, game_state):
         timeout_length = game_state['timeout_length']
         with self.handle_remote_call():
             msg_id = self.zmqconnection.send_req("get_move", {"game_state": game_state})
             reply = self.zmqconnection.recv_timeout(msg_id, timeout_length)
-            # make sure it is a dict
-            reply = dict(reply)
             if "error" in reply:
                 return reply
             # make sure that the move is a tuple
@@ -421,7 +447,7 @@ class SubprocessTeam:
         try:
             self._exit()
             if self.proc:
-                self.proc[0].terminate()
+                self.proc.terminate()
         except AttributeError:
             # in case we exit before self.proc or self.zmqconnection have been set
             pass
