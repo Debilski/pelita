@@ -318,6 +318,7 @@ class Config:
         """Speak while you print. To disable set speak=False.
         You need the program %s to be able to speak.
         Set wait=X to wait X seconds after speaking."""
+
         if len(args) == 0:
             publish_string = {"__action__": "SPEAK", "__data__": " ".join(args)}
             self.socket.send_json(publish_string)
@@ -453,8 +454,9 @@ def present_teams(config):
         config.print("{team_id}: {team_name}".format(team_id=team_id, team_name=team["name"]))
         for member in team["members"]:
             config.print("{member}".format(member=member), wait=0.1)
-        # time.sleep(1)
+#        time.sleep(1)
         config.print()
+#    time.sleep(1)
     config.print('These were the teams. Now you ready for the fight?')
 
 
@@ -467,7 +469,7 @@ def set_name(team):
         print(sys.stderr)
         raise
 
-
+# TODO: Log tournament match cmdline
 def play_game_with_config(config, teams, rng, *, match_id=None):
     config.clear_page()
     team1, team2 = teams
@@ -718,6 +720,8 @@ def play_round2(config, teams, state, rng):
     teams is the list [group0, group1, ...] not the names of the agens, sorted
     by the result of the first round.
     """
+    config.wait_for_keypress()
+    config.clear_page()
     config.print()
     config.print('ROUND 2 (K.O.)')
     config.print('==============', speak=False)
