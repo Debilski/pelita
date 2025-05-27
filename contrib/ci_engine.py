@@ -47,6 +47,7 @@ import itertools
 import json
 import logging
 import queue
+import shlex
 import signal
 import sqlite3
 import subprocess
@@ -81,7 +82,7 @@ def hash_team(team_spec):
                     'pelita.scripts.pelita_player',
                     'hash-team',
                     team_spec]
-    _logger.debug("Executing: %r", external_call)
+    _logger.debug("Executing: %r", shlex.join(external_call))
     res = subprocess.run(external_call, capture_output=True, text=True)
     return res.stdout.strip().split("\n")[-1].strip()
 
