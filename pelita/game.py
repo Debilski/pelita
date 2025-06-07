@@ -481,11 +481,11 @@ def setup_teams(team_specs, game_state, store_output=False, allow_exceptions=Fal
         team, zmq_context = make_team(team_spec, idx=idx, zmq_context=zmq_context, store_output=store_output, team_name=game_state['team_names'][idx])
         teams.append(team)
 
-    # Send the initial state to the teams and await the team name (if the teams are local, the name can be get from the game_state directly
+    # await the team name (if the teams are local, the name can be get from the game_state directly)
     team_names = []
     for idx, team in enumerate(teams):
         try:
-            team_name = team.set_initial(idx, prepare_bot_state(game_state, idx))
+            team_name = team.team_name
         except (FatalException, PlayerTimeout) as e:
             # TODO: Not sure if PlayerTimeout should let the other payer win.
             # It could simply be a network problem.
@@ -505,6 +505,27 @@ def setup_teams(team_specs, game_state, store_output=False, allow_exceptions=Fal
                 game_print(idx, f"{type(e).__name__}: {e}")
                 team_name = "%%%error%%%"
         team_names.append(team_name)
+
+    # Send the initial state to the teams
+    for idx, team in enumerate(teams):
+        try:
+            team.set_initial(idx, prepare_bot_state(game_state, idx))
+        except (FatalException, PlayerTimeout) as e:
+            # TODO: Not sure if PlayerTimeout should let the other payer win.
+            # It could simply be a network problem.
+            if allow_exceptions:
+                raise
+            exception_event = {
+                'type': e.__class__.__name__,
+                'description': str(e),
+                'turn': idx,
+                'round': None,
+            }
+            game_state['fatal_errors'][idx].append(exception_event)
+            if len(e.args) > 1:
+                game_print(idx, f"{type(e).__name__} ({e.args[0]}): {e.args[1]}")
+            else:
+                game_print(idx, f"{type(e).__name__}: {e}")
 
     team_state = {
         'teams': teams,

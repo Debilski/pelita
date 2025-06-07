@@ -380,8 +380,7 @@ class RemoteTeam:
             return self._team_name
 
         try:
-            msg_id = self.zmqconnection.send("team_name", {})
-            team_name = self.zmqconnection.recv_timeout(msg_id, self._request_timeout)
+            team_name = self.zmqconnection.recv_timeout(None, self._request_timeout)
             if team_name:
                 self._team_name = team_name
             return team_name
