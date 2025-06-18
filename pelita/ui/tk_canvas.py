@@ -214,6 +214,8 @@ class Trafo:
     def screen(self, model_x, model_y):
         return self.mesh_graph.mesh_to_screen((self.mesh_x, self.mesh_y), (model_x, model_y))
 
+
+
 class TkApplication:
     def __init__(self, window, controller_address=None,
                  geometry=None, delay=1, stop_after=None, stop_after_kill=False, fullscreen=False):
@@ -250,7 +252,7 @@ class TkApplication:
 
         self._game_state = {}
 
-        self.ui_game_canvas = tkinter.Canvas(window)
+        self.ui_game_canvas = tkinter.Canvas(self.window)
         self.ui_game_canvas.configure(background="white", bd=0, highlightthickness=0, relief='flat')
         self.ui_game_canvas.bind('<Configure>', lambda e: window.after_idle(self.update))
         self.ui_game_canvas.bind('<Button-1>', self.on_click)
@@ -386,6 +388,11 @@ class TkApplication:
             return
 
         self.mesh_graph.update_mesh_shape(game_state['shape'])
+
+        if self.ui_game_canvas.winfo_width() > 200:
+            # Set nice aspect radius
+            w, h = self.mesh_graph.mesh_width, self.mesh_graph.mesh_height
+            self.window.geometry(f"{self.ui_game_canvas.winfo_width()}x{self.ui_game_canvas.winfo_width()*h//w + HEADER_HEIGHT + self.ui_status_frame.winfo_height()}")
 
         # Check and adjust sizes
         if ((self.mesh_graph.screen_width, self.mesh_graph.screen_height)
