@@ -227,6 +227,7 @@ class TestSingleMatch:
         config.viewer = 'ascii'
         config.size = 'small'
         config.tournament_log_folder = None
+        config.publish = None
 
         teams = ["pelita/player/StoppingPlayer", "pelita/player/StoppingPlayer"]
         (state, stdout, stderr) = tournament.play_game_with_config(config, teams, rng=RNG)
@@ -268,6 +269,7 @@ class TestSingleMatch:
         config.size = 'small'
         config.print = mock_print
         config.tournament_log_folder = None
+        config.publish = None
 
         team_ids = ["first_id", "first_id"]
         result = tournament.start_match(config, team_ids, rng=RNG)
@@ -306,6 +308,7 @@ class TestSingleMatch:
         config.size = 'small'
         config.print = mock_print
         config.tournament_log_folder = None
+        config.publish = None
 
         result = tournament.start_deathmatch(config, *teams.keys(), rng=RNG)
         assert result is not None
