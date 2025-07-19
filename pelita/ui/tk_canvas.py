@@ -441,6 +441,11 @@ class TkApplication:
 
         self.mesh_graph.update_mesh_shape(game_state['shape'])
 
+        # if self.ui_game_canvas.winfo_width() > 200:
+        #     # Set nice aspect radius
+        #     w, h = self.mesh_graph.mesh_width, self.mesh_graph.mesh_height
+        #     self.window.geometry(f"{self.ui_game_canvas.winfo_width()}x{self.ui_game_canvas.winfo_width()*h//w + HEADER_HEIGHT + self.ui_status_frame.winfo_height()}")
+
         # Check and adjust sizes
         if ((self.mesh_graph.screen_width, self.mesh_graph.screen_height)
             != (self.ui_game_canvas.winfo_width(), self.ui_game_canvas.winfo_height())):
