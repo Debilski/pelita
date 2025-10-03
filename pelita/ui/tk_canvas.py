@@ -1,5 +1,6 @@
 import logging
 import platform
+import time
 
 import zmq
 
@@ -394,6 +395,7 @@ class TkApplication:
         self.ui_game_canvas.pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=True)
         self.ui_status_frame.pack(side=tkinter.TOP, fill=tkinter.X)
 
+        self._last_request_time = None
         self._min_delay = 1
         self._delay = delay
         self._stop_after = stop_after
@@ -1161,6 +1163,7 @@ class TkApplication:
             self.controller_socket.send_json({"__action__": "set_initial"})
 
     def request_step(self):
+        self._last_request_time = time.monotonic()
         if not self.controller_socket:
             return
 
@@ -1318,12 +1321,22 @@ class TkApplication:
                 if skip_request:
                     _logger.debug("Skipping next request.")
                 else:
-                    self.window.after(self._delay, self.request_step)
+                    time_since_last_request = time.monotonic() - self._last_request_time if self._last_request_time else 0
+
+                    delay = max(int(self._delay - time_since_last_request * 1000), 0)
+
+                    self._last_request_time = time.monotonic()
+                    self.window.after(delay, self.request_step)
         elif self.running:
             if skip_request:
                 _logger.debug("Skipping next request.")
             else:
-                self.window.after(self._delay, self.request_step)
+                time_since_last_request = time.monotonic() - self._last_request_time if self._last_request_time else 0
+
+                delay = max(int(self._delay - time_since_last_request * 1000), 0)
+
+                self._last_request_time = time.monotonic()
+                self.window.after(delay, self.request_step)
 
 
     def on_quit(self):
@@ -1339,13 +1352,13 @@ class TkApplication:
         self.window.quit()
 
     def delay_inc(self):
-        self._delay += 5
+        self._delay *= 1.4
         self._check_speed_button_state()
 
     def delay_dec(self):
         # Tk may break if self._delay is lower than zero.
         # (For some systems a value < 1 is already too fast.)
-        self._delay = max(self._delay - 5, self._min_delay)
+        self._delay = max(self._delay / 1.4, self._min_delay)
         self._check_speed_button_state()
 
     def _check_speed_button_state(self):

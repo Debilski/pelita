@@ -93,7 +93,8 @@ class TkViewer:
         self.poll = zmq.Poller()
         self.poll.register(self.socket, zmq.POLLIN)
 
-        self._delay = 2
+        self.delay_steps = [2, 2, 2, 4, 4, 10, 10, 10, 10, 20, 20, 20, 20, 50, 50]
+        self._delay_step_idx = 0
 
     def run(self):
         try:
@@ -137,8 +138,13 @@ class TkViewer:
     def read_queue(self):
         # We increase the polling delay up to 100ms each try to avoid
         # using too much cpu when there are no messages anyway.
-        if self._delay > 100:
-            self._delay = 100
+
+        if self._delay_step_idx >= len(self.delay_steps):
+            self._delay_step_idx = len(self.delay_steps)
+            delay = self.delay_steps[-1]
+        else:
+            delay = self.delay_steps[self._delay_step_idx]
+
         try:
             next_history_pointer = self.app.get_next_pointer()
             if self.app.running and next_history_pointer in self.app.history:
@@ -160,16 +166,18 @@ class TkViewer:
                 if game_state:
                     self.app.observe(game_state, self.standalone_mode)
                     self.app.history[self.app.get_current_pointer()] = game_state
-            self._delay = 2
-            self._after(2, self.read_queue)
+
+            self._delay_step_idx = 0
+            delay = self.delay_steps[self._delay_step_idx]
+            self._after(delay, self.read_queue)
         except zmq.Again:
-            _logger.debug('Nothing received. Waiting %0.3d milliseconds.', self._delay)
-            self._after(self._delay, self.read_queue)
-            self._delay = self._delay * 2
+            _logger.debug('Nothing received. Waiting %0.3d milliseconds.', delay)
+            self._after(delay, self.read_queue)
+            self._delay_step_idx += 1
         except zmq.ZMQError as e:
             _logger.info('ZMQ Error: %r. Ignoring.', e)
-            self._after(self._delay, self.read_queue)
-            self._delay = self._delay * 2
+            self._after(delay, self.read_queue)
+            self._delay_step_idx += 1
 
     def _after(self, delay, fun, *args):
         """ Execute fun(*args) after delay milliseconds.
