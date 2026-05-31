@@ -158,7 +158,7 @@ def run_game(team_specs, config):
 class CI_Engine:
     """Continuous Integration Engine."""
 
-    def __init__(self, cfgfile, database=None):
+    def __init__(self, cfgfile, database=None, engine_echo=False):
         self.cfg_path = Path(cfgfile)
 
         self.players = {}
@@ -178,7 +178,7 @@ class CI_Engine:
         sqlite_url = f"sqlite:///{self.db_file}"
 
         from . import db
-        db.engine = db.create_engine(sqlite_url, echo=True)
+        db.engine = db.create_engine(sqlite_url, echo=engine_echo)
         db.create_db_and_tables()
 
         from . import api
@@ -539,23 +539,25 @@ class CI_Engine:
             console.save_html(html_export)
 
 def run(args):
-    ci_engine = CI_Engine(args.config, args.database)
+    ci_engine = CI_Engine(args.config, args.database, args.db_echo)
     if not args.no_hash:
         ci_engine.load_players(concurrency=args.thread_count)
     ci_engine.start(args.n, args.thread_count)
 
 def print_scores(args):
-    ci_engine = CI_Engine(args.config, args.database)
+    ci_engine = CI_Engine(args.config, args.database, args.db_echo)
     ci_engine.pretty_print_results(full=args.full, team=args.team, html_export=args.html_export)
 
 def hash_teams(args):
-    ci_engine = CI_Engine(args.config, args.database)
+    ci_engine = CI_Engine(args.config, args.database, args.db_echo)
     ci_engine.load_players(concurrency=args.thread_count)
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--log', help="Print debugging log information to LOGFILE (default 'stderr').",
                         metavar='LOGFILE', const='-', nargs='?')
+    parser.add_argument('--db-echo', help="Print db log information to the command line.",
+                        action='store_true', default=False)
     parser.add_argument('--config', help="Print debugging log information to LOGFILE (default 'stderr').",
                         metavar='FILE', default=CFG_FILE)
     parser.add_argument('--database', help="Database location",
