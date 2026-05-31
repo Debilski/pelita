@@ -52,6 +52,9 @@ test = [
     "pytest-cov",
 ]
 doc = ["sphinx"]
+ci_engine = [
+    "sqlmodel"
+]
 
 [tool.aliases]
 test = "pytest"
