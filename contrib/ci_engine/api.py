@@ -1,7 +1,7 @@
 from typing import Sequence
 
 from sqlalchemy.orm import aliased
-from sqlmodel import Session, case, func, literal, select
+from sqlmodel import Session, case, func, select
 
 from .db import engine
 from .models import Color, Game, GameParticipant, Outcome, Team
@@ -266,7 +266,7 @@ def get_errorcount(slug):
                 Team.id,
                 Team.slug,
                 func.sum(
-                    func.if_(GameParticipant.had_fatal_error, literal(1), literal(0))
+                    case((GameParticipant.had_fatal_error, 1), else_=0)
                 ).label("fatal_errors"),
             )
             .outerjoin(GameParticipant, GameParticipant.team_id == Team.id)
