@@ -92,6 +92,7 @@ async def hash_team(team_spec, semaphore):
             stderr=asyncio.subprocess.PIPE
         )
         stdout, stderr = await proc.communicate()
+        _logger.info(f"Hash for {team_spec}: {stdout}")
 
     return stdout.decode().strip().split("\n")[-1].strip()
 
