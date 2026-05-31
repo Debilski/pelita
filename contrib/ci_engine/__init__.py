@@ -324,7 +324,7 @@ class CI_Engine:
                     _logger.warning(f"Generating all {n} match partners. Use Python 3.14+ to do this lazily.")
                     buffersize = {}
                 else:
-                    buffersize = {'buffersize': concurrency}
+                    buffersize = {'buffersize': concurrency * 10}
 
                 for result in executor.map(lambda args: worker(*args), producer(), **buffersize):
                     count, players, res = result
