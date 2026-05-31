@@ -1,10 +1,13 @@
 from typing import Sequence
 
+from openskill.models import PlackettLuce
 from sqlalchemy.orm import aliased
 from sqlmodel import Session, case, func, select
 
 from .db import engine
 from .models import Color, Game, GameOutput, GameParticipant, Outcome, Team
+
+stats_model = PlackettLuce()
 
 
 def get_team(slug) -> Team:
@@ -101,7 +104,7 @@ def remove_team(slug):
         session.commit()
 
 
-def add_gameresult(p1_name, p2_name, result, final_state, std, p1_out, p2_out):
+def add_gameresult(team1_slug, team2_slug, result, final_state, std, p1_out, p2_out):
     """Add a new game result to the database.
 
     Parameters
@@ -139,26 +142,67 @@ def add_gameresult(p1_name, p2_name, result, final_state, std, p1_out, p2_out):
     player1_had_fatal_error = len(final_state["fatal_errors"][0]) != 0
     player2_had_fatal_error = len(final_state["fatal_errors"][1]) != 0
 
-    p1 = get_team(p1_name)
-    p2 = get_team(p2_name)
-
     outcome = result_to_outcome(result)
 
     with Session(engine) as session:
+        team1 = get_team(team1_slug)
+        team2 = get_team(team2_slug)
+
+        team1_oldmu = team1.mu
+        team1_oldsigma = team1.sigma
+
+        team2_oldmu = team2.mu
+        team2_oldsigma = team2.sigma
+
+        r1 = stats_model.rating(mu=team1.mu, sigma=team1.sigma)
+        r2 = stats_model.rating(mu=team2.mu, sigma=team2.sigma)
+
+        match result:
+            case 0:
+                new_r1, new_r2 = stats_model.rate(
+                    [[r1], [r2]],
+                    ranks=[0, 1],
+                )
+            case 1:
+                new_r1, new_r2 = stats_model.rate(
+                    [[r1], [r2]],
+                    ranks=[1, 0],
+                )
+            case -1:
+                new_r1, new_r2 = stats_model.rate(
+                    [[r1], [r2]],
+                    ranks=[0, 0],
+                )
+
+        team1.mu = new_r1[0].mu
+        team1.sigma = new_r1[0].sigma
+
+        team2.mu = new_r2[0].mu
+        team2.sigma = new_r2[0].sigma
+
+
         game = Game(
             final_state=final_state,
             participants=[
                 GameParticipant(
-                    team=p1,
+                    team=team1,
                     color=Color.BLUE,
                     outcome=outcome[0],
                     had_fatal_error=player1_had_fatal_error,
+                    mu_before=team1_oldmu,
+                    sigma_before=team1_oldsigma,
+                    mu_after=team1.mu,
+                    sigma_after=team2.sigma,
                 ),
                 GameParticipant(
-                    team=p2,
+                    team=team2,
                     color=Color.RED,
                     outcome=outcome[1],
                     had_fatal_error=player2_had_fatal_error,
+                    mu_before=team2_oldmu,
+                    sigma_before=team2_oldsigma,
+                    mu_after=team2.mu,
+                    sigma_after=team2.sigma,
                 ),
             ],
             game_output=GameOutput(

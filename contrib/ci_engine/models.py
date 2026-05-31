@@ -29,6 +29,10 @@ class Team(SQLModel, table=True):
         },
     )
 
+    # OpenSkill state
+    mu: float = 25.0
+    sigma: float = 25.0 / 3.0
+
 
 class Game(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
@@ -58,6 +62,13 @@ class GameParticipant(SQLModel, table=True):
     game: Game = Relationship(back_populates="participants")
     team: Team = Relationship(back_populates="participations")
 
+    # snapshot before game
+    mu_before: float
+    sigma_before: float
+
+    # snapshot after game
+    mu_after: float
+    sigma_after: float
 
 class GameOutput(SQLModel, table=True):
     game_id: int = Field(default=None, primary_key=True, foreign_key="game.id", ondelete="CASCADE")

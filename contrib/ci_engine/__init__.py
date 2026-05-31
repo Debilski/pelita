@@ -380,25 +380,25 @@ class CI_Engine:
         table.add_column("# Draws")
         table.add_column("# Losses")
         table.add_column("Score")
-        table.add_column("ELO")
+        table.add_column("μ")
+        table.add_column("σ")
         table.add_column("# Fatal Errors")
-
-        elo = {}
-        # elo = self.gen_elo()
 
         result = []
         for idx, pname in enumerate(good_players):
             win, loss, draw = self.dbwrapper.get_result_count(pname)
             fatalerror_count = self.get_errorcount(pname)
+            mu = self.dbwrapper.get_team(pname).mu
+            sigma = self.dbwrapper.get_team(pname).sigma
             try:
                 team_name = self.dbwrapper.get_team(pname).display_name
             except ValueError:
                 team_name = None
             score = 0 if (win+loss+draw) == 0 else (win-loss) / (win+loss+draw)
-            result.append([score, win, draw, loss, pname, team_name, fatalerror_count])
+            result.append([score, win, draw, loss, pname, team_name, mu, sigma, fatalerror_count])
 
         result.sort(reverse=True)
-        for [score, win, draw, loss, name, team_name, fatalerror_count] in result:
+        for [score, win, draw, loss, name, team_name, mu, sigma, fatalerror_count] in result:
             style = "bold" if name in highlight else None
             display_name = f"{name} ({team_name})" if team_name else f"{name}"
             table.add_row(
@@ -408,7 +408,8 @@ class CI_Engine:
                 f"{draw}",
                 f"{loss}",
                 f"{score:6.3f}",
-                f"{elo.get(name, 0): >4.0f}",
+                f"{mu:6.2f}",
+                f"{sigma:6.2f}",
                 f"{fatalerror_count}",
                 style=style,
             )
