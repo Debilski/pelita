@@ -372,7 +372,7 @@ def hash_team(team):
     modules = []
     for name, module in sys.modules.items():
         if hasattr(module, '__file__') and module.__file__:
-            path = Path(module.__file__)
+            path = Path(module.__file__).resolve()
             if path.is_relative_to(folder):
                 modules.append([name, path])
 
