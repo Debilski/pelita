@@ -550,7 +550,7 @@ def hash_teams(args):
     ci_engine = CI_Engine(args.config, args.database)
     ci_engine.load_players(concurrency=args.thread_count)
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--log', help="Print debugging log information to LOGFILE (default 'stderr').",
                         metavar='LOGFILE', const='-', nargs='?')
@@ -585,3 +585,6 @@ if __name__ == '__main__':
         start_logging(args.log, 'pelita')
 
     args.func(args)
+
+if __name__ == '__main__':
+    main()
