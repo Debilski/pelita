@@ -4,7 +4,7 @@ from sqlalchemy.orm import aliased
 from sqlmodel import Session, case, func, select
 
 from .db import engine
-from .models import Color, Game, GameParticipant, Outcome, Team
+from .models import Color, Game, GameOutput, GameParticipant, Outcome, Team
 
 
 def get_team(slug) -> Team:
@@ -161,6 +161,11 @@ def add_gameresult(p1_name, p2_name, result, final_state, std, p1_out, p2_out):
                     had_fatal_error=player2_had_fatal_error,
                 ),
             ],
+            game_output=GameOutput(
+                stdout=stdout, stderr=stderr,
+                player1_stdout=p1_stdout, player1_stderr=p1_stderr,
+                player2_stdout=p2_stdout, player2_stderr=p2_stderr
+            )
         )
 
         session.add(game)
