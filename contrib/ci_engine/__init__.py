@@ -43,24 +43,22 @@ stabilized.
 
 import argparse
 import asyncio
-import collections
-from concurrent.futures import ThreadPoolExecutor
 import configparser
 import itertools
-import json
 import logging
 import operator
-from pathlib import Path
 import shlex
 import signal
-import sqlite3
 import sys
 import threading
-from tempfile import TemporaryDirectory
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from random import Random
+from tempfile import TemporaryDirectory
 
 from rich.console import Console
-from rich.progress import (Progress, SpinnerColumn, TextColumn, TimeElapsedColumn)
+from rich.progress import (Progress, SpinnerColumn, TextColumn,
+                           TimeElapsedColumn)
 from rich.table import Table
 
 from pelita.network import RemotePlayerFailure
@@ -175,16 +173,24 @@ class CI_Engine:
         self.seed = config['general'].get('seed', None)
 
         self.db_file = database or config.get('general', 'db_file')
-        self.dbwrapper = DB_Wrapper(self.db_file)
+
+        sqlite_url = f"sqlite:///{self.db_file}"
+
+        from . import db
+        db.engine = db.create_engine(sqlite_url, echo=True)
+        db.create_db_and_tables()
+
+        from . import api
+        self.dbwrapper = api
 
     def load_players(self, concurrency=1):
         hash_cache = {}
 
         # remove players from db which are not in the config anymore
-        for pname in self.dbwrapper.get_players():
-            if pname not in self.players:
-                _logger.debug('Removing %s from database, because it is not among the current players.' % (pname))
-                self.dbwrapper.remove_player(pname)
+        for player in self.dbwrapper.get_teams():
+            if player.slug not in self.players:
+                _logger.debug('Removing %s from database, because it is not among the current players.' % (player.slug))
+                self.dbwrapper.remove_team(player.slug) # ???
 
         semaphore = asyncio.Semaphore(concurrency)
 
@@ -199,18 +205,18 @@ class CI_Engine:
         # add new players into db
         for pname, player in self.players.items():
             path = player['path']
-            if pname not in self.dbwrapper.get_players():
+            if pname not in [p.slug for p in self.dbwrapper.get_teams()]:
                 _logger.debug('Adding %s to database.' % pname)
-                self.dbwrapper.add_player(pname, hash_cache[pname])
+                self.dbwrapper.add_team(pname, hash_cache[pname])
 
         # reset players where the directory hash changed
         for pname, player in self.players.items():
             path = player['path']
             new_hash = hash_cache[pname]
-            if new_hash != self.dbwrapper.get_player_hash(pname):
+            if new_hash != self.dbwrapper.get_team_hash(pname):
                 _logger.debug('Resetting %s because its module hash changed.' % pname)
-                self.dbwrapper.remove_player(pname)
-                self.dbwrapper.add_player(pname, new_hash)
+                self.dbwrapper.remove_team(pname)
+                self.dbwrapper.add_team(pname, new_hash)
 
         def check_team_name(args):
             pname, path = args
@@ -231,13 +237,13 @@ class CI_Engine:
                 if 'error' in team_name:
                     self.players[pname]['error'] = team_name['error']
                 else:
-                    self.dbwrapper.add_team_name(pname, team_name['team_name'])
+                    self.dbwrapper.add_display_name(pname, team_name['team_name'])
 
         for pname in self.players:
              if 'error' in self.players[pname]:
                  print(pname, self.players[pname])
              else:
-                 print(pname, self.players[pname], self.dbwrapper.get_team_name(pname))
+                 print(pname, self.players[pname], self.dbwrapper.get_team(pname).display_name)
 
     def start(self, n, concurrency):
         """Start the Engine.
@@ -337,66 +343,6 @@ class CI_Engine:
                         progress.console.print(f"Not storing #{count}: {players[0]} against {players[1]}.")
                     self.dbwrapper.add_gameresult(p1_name, p2_name, winner, final_state, out, p1_out, p2_out)
 
-
-    def get_results(self, p1_name, p2_name=None):
-        """Get the results so far.
-
-        This method goes through the internal list of of all game
-        results and calculates the result for the player with index
-        ``idx`` against everyone else.
-
-        If the optional argument ``idx2`` is given only the results of
-        the players ``idx`` vs ``idx2`` are returned.
-
-        Parameters
-        ----------
-        idx : int
-            the index of the player
-        idx2 : int, optional
-            the index of the second player if this parameter is not
-            given the result of player against all other players is
-            returned otherwise the results of the games of the players
-            with the indices ``idx`` and ``idx2`` are returned
-
-
-        Returns
-        -------
-        win, loss, draw : int
-            the number of wins, losses and draws for this player or
-            combination of players
-
-        Examples
-        --------
-
-        >>> # get the results of player with index 1 against all other
-        >>> # players
-        >>> ci.get_results(1)
-        (5, 2, 0)
-        >>> # get the results of all games with the players of index 1
-        >>> # and 5
-        >>> ci.get_results(1, 5)
-        (2, 0, 0)
-
-        """
-        win, loss, draw = 0, 0, 0
-        relevant_results = self.dbwrapper.get_results(p1_name, p2_name)
-        for p1, p2, r in relevant_results:
-            if (p2_name is None and p1_name == p1) or (p2_name is not None and p1_name == p1 and p2_name == p2):
-                if r == 0:
-                    win += 1
-                elif r == 1:
-                    loss += 1
-                elif r == -1:
-                    draw += 1
-            if (p2_name is None and p1_name == p2) or (p2_name is not None and p1_name == p2 and p2_name == p1):
-                if r == 1:
-                    win += 1
-                elif r == 0:
-                    loss += 1
-                elif r == -1:
-                    draw += 1
-        return win, loss, draw
-
     def get_errorcount(self, p_name):
         """Gets the error count for team idx
 
@@ -413,42 +359,6 @@ class CI_Engine:
         """
         fatalerror_count = self.dbwrapper.get_errorcount(p_name)
         return fatalerror_count
-
-    def get_team_name(self, p_name):
-        """Get last registered team name.
-
-        team_name : string
-        """
-
-        return self.dbwrapper.get_team_name(p_name)
-
-    def gen_elo(self):
-        k = 32
-
-        def elo_change(a, b, outcome):
-            expected = 1 / ( 10**((b - a) / 400) + 1 )
-            return k * (outcome - expected)
-
-        from collections import defaultdict
-        elo = defaultdict(lambda: 1500.)
-
-        g = self.dbwrapper.cursor.execute("""
-        SELECT player1, player2, result
-        FROM games
-        """).fetchall()
-        for p1, p2, result in g:
-            change = 0
-            if result == 0:
-                change = elo_change(elo[p1], elo[p2], 1)
-            if result == 1:
-                change = elo_change(elo[p1], elo[p2], 0)
-            if result == -1:
-                change = elo_change(elo[p1], elo[p2], 0.5)
-
-            elo[p1] += change
-            elo[p2] -= change
-
-        return elo
 
     def pretty_print_results(self, full=False, team=None, highlight=None, html_export=None):
         """Pretty print the current results.
@@ -473,15 +383,15 @@ class CI_Engine:
         table.add_column("ELO")
         table.add_column("# Fatal Errors")
 
-        elo = dict(self.dbwrapper.get_elo())
+        elo = {}
         # elo = self.gen_elo()
 
         result = []
         for idx, pname in enumerate(good_players):
-            win, loss, draw = self.get_results(pname)
+            win, loss, draw = self.dbwrapper.get_result_count(pname)
             fatalerror_count = self.get_errorcount(pname)
             try:
-                team_name = self.get_team_name(pname)
+                team_name = self.dbwrapper.get_team(pname).display_name
             except ValueError:
                 team_name = None
             score = 0 if (win+loss+draw) == 0 else (win-loss) / (win+loss+draw)
@@ -516,8 +426,8 @@ class CI_Engine:
                 # Let’s be honest: You should enlarge your terminal window even before that
                 MAX_COLUMNS = 4
 
-            res = self.dbwrapper.get_wins_losses()
-            rows = { k: list(v) for k, v in itertools.groupby(res, key=lambda x:x[0]) }
+            res = list(self.dbwrapper.get_wins_losses())
+            rows = { k: list(v) for k, v in itertools.groupby(res, key=lambda x:x['team']) }
 
             num_rows_per_player = (len(good_players) // MAX_COLUMNS) + 1
             row_style = [*([""] * num_rows_per_player), *(["dim"] * num_rows_per_player)]
@@ -547,10 +457,11 @@ class CI_Engine:
                     yield batch
 
             for idx, pname in enumerate(good_players):
-                win, loss, draw = self.get_results(pname)
+                win, loss, draw = self.dbwrapper.get_result_count(pname)
+
                 fatalerror_count = self.get_errorcount(pname)
                 try:
-                    team_name = self.get_team_name(pname)
+                    team_name = self.dbwrapper.get_team(pname).display_name
                 except ValueError:
                     team_name = None
                 score = 0 if (win+loss+draw) == 0 else (win-loss) / (win+loss+draw)
@@ -560,7 +471,7 @@ class CI_Engine:
                     row = rows[pname]
                 except KeyError:
                     continue
-                vals = { k: (w,l,d) for _p1, k, w, l, d in row }
+                vals = { e['opponent']: (e['wins'], e['losses'], e['draws']) for e in row }
 
                 cross_results = []
                 for idx2, p2name in enumerate(good_players):
@@ -584,8 +495,8 @@ class CI_Engine:
                 # Let’s be honest: You should enlarge your terminal window even before that
                 MAX_COLUMNS = 4
 
-            res = self.dbwrapper.get_wins_losses(team=team)
-            rows = {k: list(v) for k, v in itertools.groupby(res, key=lambda x:x[1])}
+            res = self.dbwrapper.get_wins_losses(slug=team)
+            rows = {k: list(v) for k, v in itertools.groupby(res, key=lambda x:x['team'])}
 
             row_style = ["", "dim"]
 
@@ -598,7 +509,7 @@ class CI_Engine:
 
             for idx, pname in enumerate(good_players):
                 try:
-                    team_name = self.get_team_name(pname)
+                    team_name = self.dbwrapper.get_team(pname).display_name
                 except ValueError:
                     team_name = None
 
@@ -608,7 +519,7 @@ class CI_Engine:
                     continue
 
                 for r in row: # there should only be one row
-                    p1, p2, win, loss, draw = r
+                    win, loss, draw = r['wins'], r['losses'], r['draws']
 
                     display_name = f"{pname} ({team_name})" if team_name else f"{pname}"
 
@@ -624,495 +535,6 @@ class CI_Engine:
 
         if html_export:
             console.save_html(html_export)
-
-
-class DB_Wrapper:
-    """Wrapper around the games database."""
-
-    def __init__(self, dbfile):
-        """Initialize the connection to the db ``dbfile``.
-
-        Create table if file does not exist.
-
-        Parameters
-        ----------
-        dbfile : str
-            path to sqlite3 database
-
-        """
-        self.db_file = dbfile
-        _logger.info("Using sqlite database file ‘%s’.", self.db_file)
-        self.connection = sqlite3.connect(self.db_file)
-        self.cursor = self.connection.cursor()
-        self.cursor.execute("PRAGMA foreign_keys = ON;")
-        self.create_tables()
-
-    def create_tables(self):
-        """Create tables.
-
-        This is a no-op if the tables already exist.
-
-        """
-        self.cursor.execute("""
-        CREATE TABLE IF NOT EXISTS players
-        (name text PRIMARY KEY, hash text)
-        """)
-        self.cursor.execute("""
-        CREATE TABLE IF NOT EXISTS team_names
-        (name text PRIMARY KEY, team_name text,
-        FOREIGN KEY(name) REFERENCES players(name) ON DELETE CASCADE)
-        """)
-        self.cursor.execute("""
-        CREATE TABLE IF NOT EXISTS games
-        (
-        id INTEGER PRIMARY KEY,
-        player1 text, player2 text, result int, final_state text,
-        player1_had_fatal_error bool, player2_had_fatal_error bool,
-        FOREIGN KEY(player1) REFERENCES players(name) ON DELETE CASCADE,
-        FOREIGN KEY(player2) REFERENCES players(name) ON DELETE CASCADE)
-        """)
-        self.cursor.execute("""
-        CREATE TABLE IF NOT EXISTS game_output
-        (game_id int,
-        stdout text, stderr text,
-        player1_stdout text, player1_stderr text,
-        player2_stdout text, player2_stderr text,
-        FOREIGN KEY(game_id) REFERENCES games(id) ON DELETE CASCADE)
-        """)
-        self.connection.commit()
-
-    def get_players(self):
-        """Get players from the database.
-
-        Returns
-        -------
-        players : list of strings
-            the player names from the database.
-
-        """
-        players = self.cursor.execute("""SELECT name FROM players""").fetchall()
-        players = [row[0] for row in players]
-        return players
-
-    def get_player_hash(self, name):
-        """Get the hash stored in the database for the player.
-
-        Raises
-        ------
-        ValueError : if the player does not exist in the database
-
-        """
-        h = self.cursor.execute("""
-        SELECT hash
-        FROM players
-        WHERE name = ?
-        """, (name,)).fetchone()
-        if h is None:
-            raise ValueError('Player %s does not exist in database.' % name)
-        return h[0]
-
-    def add_player(self, name, h):
-        """Add player to database
-
-        Parameters
-        ----------
-        name : str
-        h : str
-            hash of the player's directory
-
-        Raises
-        ------
-        ValueError : if player already exists in database
-
-        """
-        try:
-            self.cursor.execute("""
-            INSERT INTO players
-            VALUES (?, ?)
-            """, [name, h])
-            self.connection.commit()
-        except sqlite3.IntegrityError:
-            raise ValueError('Player %s already exists in database' % name)
-
-    def add_team_name(self, name, team_name):
-        """Adds or updates team name to database
-
-        Parameters
-        ----------
-        name : str
-        team_name : str
-
-        """
-        try:
-            self.cursor.execute("""
-            INSERT OR REPLACE INTO team_names
-            VALUES (?, ?)
-            """, [name, team_name])
-            self.connection.commit()
-        except sqlite3.IntegrityError:
-            raise ValueError('Cannot add team name for %s' % name)
-
-    def remove_player(self, pname):
-        """Remove a player from the database.
-
-        Removes all games where the player ``pname`` participated.
-
-        Parameters
-        ----------
-        pname : str
-            the player name of the player to be removed
-
-        """
-        self.cursor.execute("""DELETE FROM games
-        WHERE player1 = ? or player2 = ?""", (pname, pname))
-        self.cursor.execute("""DELETE FROM players
-        WHERE name = ?""", (pname,))
-        self.connection.commit()
-
-    def add_gameresult(self, p1_name, p2_name, result, final_state, std, p1_out, p2_out):
-        """Add a new game result to the database.
-
-        Parameters
-        ----------
-        p1_name, p2_name : str
-            the names of the players
-        result : 0, 1 or -1
-            0 if player 1 won
-            1 of player 2 won
-            -1 if draw
-            -2 if anything other than game_phase FINISHED
-        std_out, std_err : str
-            STDOUT and STDERR of the game
-
-        """
-
-        stdout, stderr = std
-        p1_stdout, p1_stderr = p1_out
-        p2_stdout, p2_stderr = p2_out
-
-        if not final_state:
-            return
-
-        final_state_str = json.dumps(final_state)
-
-        player1_had_fatal_error = len(final_state['fatal_errors'][0]) != 0
-        player2_had_fatal_error = len(final_state['fatal_errors'][1]) != 0
-
-        self.cursor.execute("""
-        INSERT INTO games
-            (player1, player2, result, final_state,
-            player1_had_fatal_error, player2_had_fatal_error)
-        VALUES (?, ?, ?, ?, ?, ?)
-        RETURNING id
-        """, [p1_name, p2_name, result, final_state_str,
-              player1_had_fatal_error, player2_had_fatal_error])
-
-        game_id, = self.cursor.fetchone()
-        self.cursor.execute("""
-        INSERT INTO game_output
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, [game_id,
-              stdout, stderr,
-              p1_stdout, p1_stderr, p2_stdout, p2_stderr])
-        self.connection.commit()
-
-    def get_results(self, p1_name, p2_name=None):
-        """Get all games involving player1 (AND player2 if specified).
-
-        Parameters
-        ----------
-        p1_name : str
-            the  name of player 1
-        p2_name : str, optional
-            the name of player 2, if not specified ``get_results`` will
-            return all games involving player 1 otherwise it will return
-            all games of player1 AND player2
-
-        Returns
-        -------
-        relevant_results : list of gameresults
-
-        """
-        if p2_name is None:
-            self.cursor.execute("""
-            SELECT player1, player2, result FROM games
-            WHERE player1 = ? or player2 = ?""", (p1_name, p1_name))
-            relevant_results = self.cursor.fetchall()
-        else:
-            self.cursor.execute("""
-            SELECT player1, player2, result FROM games
-            WHERE (player1 = :p1 and player2 = :p2) or (player1 = :p2 and player2 = :p1)""",
-            dict(p1=p1_name, p2=p2_name))
-            relevant_results = self.cursor.fetchall()
-        return relevant_results
-
-
-    def get_team_name(self, p_name):
-        """Gets the last registered team name of p_name.
-
-        Parameters
-        ----------
-        p_name : str
-            the name of the player
-
-        Returns
-        -------
-        team_name : str
-
-        """
-        self.cursor.execute("""
-        SELECT team_name FROM team_names
-        WHERE name = ?""", (p_name,))
-        res = self.cursor.fetchone()
-        if res is None:
-            raise ValueError('Player %s does not exist in database.' % p_name)
-        return res[0]
-
-    def get_game_counts(self):
-        """Get number of games per player.
-
-        Returns
-        -------
-        relevant_results : dict[name, int]
-
-        """
-        self.cursor.execute("""
-            SELECT p.name, COUNT(g.player) AS num_games
-                FROM
-                    players p
-                    LEFT JOIN
-                    (
-                        SELECT player1 AS player FROM games
-                        UNION ALL
-                        SELECT player2 AS player FROM games
-                    ) g
-                ON p.name = g.player
-                GROUP BY p.name
-        """)
-        counts = collections.Counter()
-        for name, val in self.cursor.fetchall():
-            counts[name] += val
-        return counts
-
-    def get_game_count(self, p1_name, p2_name=None):
-        """Get number of games involving player1 (AND player2 if specified).
-
-        Parameters
-        ----------
-        p1_name : str
-            the  name of player 1
-        p2_name : str, optional
-            the name of player 2, if not specified ``get_results`` will
-            return all games involving player 1 otherwise it will return
-            all games of player1 AND player2
-
-        Returns
-        -------
-        relevant_results : list of gameresults
-
-        """
-        if p2_name is None:
-            self.cursor.execute("""
-            SELECT count(*) FROM games
-            WHERE player1 = ? or player2 = ?""", (p1_name, p1_name))
-            count, = self.cursor.fetchone()
-        else:
-            self.cursor.execute("""
-            SELECT count(*) FROM games
-            WHERE (player1 = :p1 and player2 = :p2) or (player1 = :p2 and player2 = :p1)""",
-            dict(p1=p1_name, p2=p2_name))
-            count, = self.cursor.fetchone()
-        return count
-
-    def get_errorcount(self, p1_name):
-        """Get errorcount of player1
-
-        Parameters
-        ----------
-        p1_name : str
-            the  name of player 1
-
-        Returns
-        -------
-        fatalerror_count : errorcount
-        """
-        self.cursor.execute("""
-        SELECT sum(fatal_errors) FROM
-            (
-                SELECT
-                    sum(player1_had_fatal_error) AS fatal_errors
-                FROM games
-                WHERE player1 = :p1
-
-                UNION ALL
-
-                SELECT
-                    sum(player2_had_fatal_error) AS fatal_errors
-                FROM games
-                WHERE player2 = :p1
-            )
-        """,
-        dict(p1=p1_name))
-        fatal_errorcount = self.cursor.fetchone()
-
-        return fatal_errorcount[0]
-
-    def get_wins_losses(self, team=None):
-        """ Get all wins and losses combined in a table of
-        team | opponent | wins | losses | draws
-        """
-
-        if team is not None:
-            where_clause = "WHERE team = ?"
-        else:
-            where_clause = ""
-
-        query = f"""
-
-        SELECT
-            team, opponent, SUM(wins) AS wins, SUM(losses) AS losses, SUM(draws) AS draws
-        FROM (
-            -- Count wins for player1
-            SELECT
-                player1 AS team, player2 AS opponent, COUNT(*) AS wins, 0 AS losses, 0 AS draws
-            FROM games
-            WHERE result = 0
-            GROUP BY player1, player2
-
-            UNION ALL
-
-            -- Count wins for player2
-            SELECT
-                player2 AS team, player1 AS opponent, 0 AS wins, COUNT(*) AS losses, 0 AS draws
-            FROM games
-            WHERE result = 0
-            GROUP BY player2, player1
-
-            UNION ALL
-
-            -- Count losses for player1
-            SELECT
-                player1 AS team, player2 AS opponent, 0 AS wins, COUNT(*) AS losses, 0 AS draws
-            FROM games
-            WHERE result = 1
-            GROUP BY player1, player2
-
-            UNION ALL
-
-            -- Count losses for player2
-            SELECT
-                player2 AS team, player1 AS opponent, COUNT(*) AS wins, 0 AS losses, 0 AS draws
-            FROM games
-            WHERE result = 1
-            GROUP BY player2, player1
-
-            UNION ALL
-
-            -- Count draws for both teams
-            SELECT
-                player1 AS team, player2 AS opponent, 0 AS wins, 0 AS losses, COUNT(*) AS draws
-            FROM games
-            WHERE result = -1
-            GROUP BY player1, player2
-
-            UNION ALL
-
-            SELECT
-                player2 AS team, player1 AS opponent, 0 AS wins, 0 AS losses, COUNT(*) AS draws
-            FROM games
-            WHERE result = -1
-            GROUP BY player2, player1
-        ) AS results
-        {where_clause}
-        GROUP BY
-            team, opponent
-        ORDER BY
-            team, opponent
-        ;
-        """
-        if team is not None:
-            return self.cursor.execute(query, [team]).fetchall()
-        else:
-            return self.cursor.execute(query).fetchall()
-
-
-    def get_elo(self):
-        query = """
-        WITH RECURSIVE
-        ordered_matches AS (
-        SELECT
-            ROW_NUMBER() OVER (ORDER BY rowid) AS match_num,
-            player1,
-            player2,
-            result
-        FROM games
-        ),
-
-        -- Initialize with first match
-        elo_recursive(match_num, player1, player2, result,
-                    rating1, rating2,
-                    rating_json) AS (
-        SELECT
-            match_num,
-            player1,
-            player2,
-            result,
-            1500.0,
-            1500.0,
-            json_object(player1, 1500.0, player2, 1500.0)
-        FROM ordered_matches
-        WHERE match_num = 1
-
-        UNION ALL
-
-        SELECT
-            om.match_num,
-            om.player1,
-            om.player2,
-            om.result,
-
-            -- Get ratings from JSON state
-            IFNULL(CAST(json_extract(er.rating_json, '$.' || om.player1) AS REAL), 1500.0),
-            IFNULL(CAST(json_extract(er.rating_json, '$.' || om.player2) AS REAL), 1500.0),
-
-            -- Update JSON state with new ratings
-            json_set(
-                er.rating_json,
-                '$.' || om.player1,
-                ROUND(
-                IFNULL(CAST(json_extract(er.rating_json, '$.' || om.player1) AS REAL), 1500.0) +
-                32 * ((CASE om.result WHEN 0 THEN 1.0 WHEN -1 THEN 0.5 ELSE 0.0 END) -
-                1.0 / (1 + pow(10, (
-                    IFNULL(CAST(json_extract(er.rating_json, '$.' || om.player2) AS REAL), 1500.0) -
-                    IFNULL(CAST(json_extract(er.rating_json, '$.' || om.player1) AS REAL), 1500.0)
-                ) / 400.0))), 2),
-                '$.' || om.player2,
-                ROUND(
-                IFNULL(CAST(json_extract(er.rating_json, '$.' || om.player2) AS REAL), 1500.0) +
-                32 * ((CASE om.result WHEN 0 THEN 0.0 WHEN -1 THEN 0.5 ELSE 1.0 END) -
-                1.0 / (1 + pow(10, (
-                    IFNULL(CAST(json_extract(er.rating_json, '$.' || om.player1) AS REAL), 1500.0) -
-                    IFNULL(CAST(json_extract(er.rating_json, '$.' || om.player2) AS REAL), 1500.0)
-                ) / 400.0))), 2)
-            )
-        FROM ordered_matches om
-        JOIN elo_recursive er ON om.match_num = er.match_num + 1
-        ),
-
-        final AS (
-        SELECT rating_json
-        FROM elo_recursive
-        ORDER BY match_num DESC
-        LIMIT 1
-        )
-        SELECT
-        key AS player,
-        ROUND(value, 2) AS rating
-        FROM final, json_each(rating_json)
-        ORDER BY rating DESC;
-
-        """
-        return self.cursor.execute(query).fetchall()
 
 def run(args):
     ci_engine = CI_Engine(args.config, args.database)
