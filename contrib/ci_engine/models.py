@@ -42,6 +42,8 @@ class Game(SQLModel, table=True):
         },
     )
 
+    game_output: Optional["GameOutput"] = Relationship(back_populates="game")
+
 
 class GameParticipant(SQLModel, table=True):
     __table_args__ = (UniqueConstraint("game_id", "color"),)
@@ -66,3 +68,5 @@ class GameOutput(SQLModel, table=True):
     player1_stderr: str
     player2_stdout: str
     player2_stderr: str
+
+    game: Game = Relationship(back_populates="game_output")
