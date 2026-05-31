@@ -175,10 +175,13 @@ class CI_Engine:
 
         self.db_file = database or config.get('general', 'db_file')
 
-        sqlite_url = f"sqlite:///{self.db_file}"
+        if not ":" in self.db_file:
+            db_url = f"sqlite:///{self.db_file}"
+        else:
+            db_url = self.db_file
 
         from . import db
-        db.engine = db.create_engine(sqlite_url, echo=engine_echo)
+        db.engine = db.create_engine(db_url, echo=engine_echo)
         db.create_db_and_tables()
 
         from . import api
