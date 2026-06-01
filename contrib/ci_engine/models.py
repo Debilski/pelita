@@ -1,8 +1,12 @@
 from enum import IntEnum
 from typing import Optional
 
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import (JSON, Column, Field, Relationship, SQLModel,
                       UniqueConstraint)
+
+
+JSONType = JSON().with_variant(JSONB(), "postgresql")
 
 
 class Color(IntEnum):
@@ -37,7 +41,7 @@ class Team(SQLModel, table=True):
 class Game(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
 
-    final_state: Optional[dict] = Field(sa_column=Column(JSON))
+    final_state: Optional[dict] = Field(sa_column=Column(JSONType))
 
     participants: list["GameParticipant"] = Relationship(
         back_populates="game",
