@@ -46,13 +46,21 @@ class Game(SQLModel, table=True):
         },
     )
 
-    game_output: Optional["GameOutput"] = Relationship(back_populates="game")
+    game_output: Optional["GameOutput"] = Relationship(
+        back_populates="game",
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+        },
+    )
 
 
 class GameParticipant(SQLModel, table=True):
     __table_args__ = (UniqueConstraint("game_id", "color"),)
-    game_id: int = Field(foreign_key="game.id", primary_key=True, ondelete="CASCADE")
-    team_id: int = Field(foreign_key="team.id", primary_key=True, ondelete="CASCADE")
+
+    id: int | None = Field(default=None, primary_key=True)
+
+    game_id: int = Field(foreign_key="game.id", ondelete="CASCADE")
+    team_id: int = Field(foreign_key="team.id", ondelete="CASCADE")
 
     color: Color
     outcome: Outcome
@@ -61,6 +69,12 @@ class GameParticipant(SQLModel, table=True):
 
     game: Game = Relationship(back_populates="participants")
     team: Team = Relationship(back_populates="participations")
+    game_participant_output: Optional["GameParticipantOutput"] = Relationship(
+        back_populates="game_participant",
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+        },
+    )
 
     # snapshot before game
     mu_before: float
@@ -75,9 +89,14 @@ class GameOutput(SQLModel, table=True):
 
     stdout: str
     stderr: str
-    player1_stdout: str
-    player1_stderr: str
-    player2_stdout: str
-    player2_stderr: str
 
     game: Game = Relationship(back_populates="game_output")
+
+
+class GameParticipantOutput(SQLModel, table=True):
+    gameparticipant_id: int = Field(default=None, primary_key=True, foreign_key="gameparticipant.id", ondelete="CASCADE")
+
+    stdout: str
+    stderr: str
+
+    game_participant: GameParticipant = Relationship(back_populates="game_participant_output")
