@@ -61,9 +61,12 @@ from rich.progress import (Progress, SpinnerColumn, TextColumn,
                            TimeElapsedColumn)
 from rich.table import Table
 
-from pelita.network import RemotePlayerFailure
+from pelita.network import RemotePlayerFailure, RemotePlayerSendError, RemotePlayerRecvTimeout
 from pelita.scripts.script_utils import start_logging
 from pelita.tournament import call_pelita, check_team
+
+from . import api, db
+from .db import session_context
 
 _logger = logging.getLogger(__name__)
 
@@ -153,334 +156,311 @@ def run_game(team_specs, config):
         res = (result, final_state, [stdout, stderr], [p1_stdout, p1_stderr], [p2_stdout, p2_stderr])
         return res
 
+class Config:
+    rounds: int | None
+    size: str | None
+    viewer: str
+    seed: str | None
+    db_url: str
+    players: dict[str, str]
 
 
-class CI_Engine:
-    """Continuous Integration Engine."""
+def read_config(cfgfile, database=None) -> Config:
+    cfg = Config()
 
-    def __init__(self, cfgfile, database=None, engine_echo=False):
-        self.cfg_path = Path(cfgfile)
+    cfg_path = Path(cfgfile)
 
-        self.players = {}
-        config = configparser.ConfigParser()
-        config.read(cfgfile)
-        for name, path in  config.items('agents'):
-            self.players[name]= {'path': str(self.cfg_path.parent / path)}
+    cfg.players = {}
+    config = configparser.ConfigParser()
+    config.read(cfgfile)
+    for name, path in  config.items('agents'):
+        cfg.players[name]= str(cfg_path.parent / path)
 
 
-        self.rounds = config['general'].getint('rounds', None)
-        self.size = config['general'].get('size', None)
-        self.viewer = config['general'].get('viewer', 'null')
-        self.seed = config['general'].get('seed', None)
+    cfg.rounds = config['general'].getint('rounds', None)
+    cfg.size = config['general'].get('size', None)
+    cfg.viewer = config['general'].get('viewer', 'null')
+    cfg.seed = config['general'].get('seed', None)
 
-        self.db_file = database or config.get('general', 'db_file')
+    db_file = database or config.get('general', 'db_file')
 
-        if not ":" in self.db_file:
-            db_url = f"sqlite:///{self.db_file}"
-        else:
-            db_url = self.db_file
+    if ":" not in db_file:
+        cfg.db_url = f"sqlite:///{db_file}"
+    else:
+        cfg.db_url = db_file
 
-        from . import db
-        db.engine = db.create_engine(db_url, echo=engine_echo)
-        db.create_db_and_tables()
+    return cfg
 
-        from . import api
-        self.dbwrapper = api
+def create_db_engine(db_url, engine_echo):
+    db.engine = db.create_engine(db_url, echo=engine_echo)
+    db.create_db_and_tables()
 
-    def load_players(self, concurrency=1):
-        hash_cache = {}
 
+def load_players(cfg_players, concurrency=1):
+    with session_context() as session:
         # remove players from db which are not in the config anymore
-        for player in self.dbwrapper.get_teams():
-            if player.slug not in self.players:
-                _logger.debug('Removing %s from database, because it is not among the current players.' % (player.slug))
-                self.dbwrapper.remove_team(player.slug) # ???
+        for path in api.get_teams(session):
+            if path.slug not in cfg_players:
+                _logger.debug('Removing %s from database, because it is not among the current players.' % (path.slug))
+                api.remove_team(session, path.slug) # ???
 
         semaphore = asyncio.Semaphore(concurrency)
 
         async def do_hash():
-            players = [(pname, player['path']) for pname, player in self.players.items()]
-            tasks = [asyncio.create_task(hash_team(player[1], semaphore)) for player in players]
+            tasks = [asyncio.create_task(hash_team(path, semaphore)) for path in cfg_players.values()]
             hashes = await asyncio.gather(*tasks)
-            return {player[0]: hash for (player, hash) in zip(players, hashes)}
+            return {slug: hash for (slug, hash) in zip(cfg_players, hashes)}
 
         hash_cache = asyncio.run(do_hash())
 
         # add new players into db
-        for pname, player in self.players.items():
-            path = player['path']
-            if pname not in [p.slug for p in self.dbwrapper.get_teams()]:
-                _logger.debug('Adding %s to database.' % pname)
-                self.dbwrapper.add_team(pname, hash_cache[pname])
+        for slug, path in cfg_players.items():
+            if slug not in [p.slug for p in api.get_teams(session)]:
+                _logger.debug('Adding %s to database.' % slug)
+                api.add_team(session, slug, hash_cache[slug])
 
         # reset players where the directory hash changed
-        for pname, player in self.players.items():
-            path = player['path']
-            new_hash = hash_cache[pname]
-            if new_hash != self.dbwrapper.get_team_hash(pname):
-                _logger.debug('Resetting %s because its module hash changed.' % pname)
-                self.dbwrapper.remove_team(pname)
-                self.dbwrapper.add_team(pname, new_hash)
+        for slug, path in cfg_players.items():
+            new_hash = hash_cache[slug]
+            if new_hash != api.get_team_hash(session, slug):
+                _logger.debug('Resetting %s because its module hash changed.' % slug)
+                api.remove_team(session, slug)
+                api.add_team(session, slug, new_hash)
 
         def check_team_name(args):
-            pname, path = args
+            slug, path = args
             try:
-                _logger.debug('Querying team name for %s.' % pname)
+                _logger.debug('Querying team name for %s.' % slug)
                 team_name = check_team(path, timeout=6*concurrency)
-                return { 'team_name': team_name }
-            except RemotePlayerFailure as e:
-                e_type, e_msg = e.args
-                _logger.debug(f'Could not import {pname} at path {path} ({e_type}): {e_msg}')
-                return { 'error': e.args }
+                return team_name
+            except (RemotePlayerSendError, RemotePlayerRecvTimeout, RemotePlayerFailure) as e:
+                _logger.debug(f'Could not import {slug} at path {path}: {e}')
+                # TODO: Forward error
+                return None
 
         with ThreadPoolExecutor(max_workers=concurrency) as executor:
-            players = [(pname, player['path']) for pname, player in self.players.items()]
-            team_names = executor.map(check_team_name, players)
+            display_names = executor.map(check_team_name, cfg_players.items())
 
-            for (pname, path), team_name in zip(players, team_names):
-                if 'error' in team_name:
-                    self.players[pname]['error'] = team_name['error']
+        ok_players = dict(cfg_players)
+
+        for slug, display_name in zip(cfg_players, display_names):
+            if display_name is None:
+                del ok_players[slug]
+            else:
+                api.add_display_name(session, slug, display_name)
+
+    # Returning the players that could be loaded
+    # In the future this could maybe flag in the database
+    return ok_players
+
+
+def start_engine(config, cfg_players, n, concurrency):
+    """Start the Engine.
+
+    This method will start and run n matches, testing each agent
+    randomly against another one. The result is printed after each
+    game.
+
+    Currently the only way to stop the engine is via CTRL-C.
+
+    Examples
+    --------
+    >>> ci = CI_Engine()
+    >>> ci.start()
+
+    """
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        TimeElapsedColumn()
+    ) as progress:
+
+        lock = threading.Lock()
+
+        def worker(count, p1_slug, p2_slug):
+            with lock:
+                progress_task = progress.add_task(f"Playing #{count}: {p1_slug} against {p2_slug}.")
+
+            game_config = {
+                'rounds': config.rounds,
+                'size': config.size,
+                'viewer': config.viewer,
+                'seed': None, # TODO
+            }
+
+            team_specs = [cfg_players[p1_slug], cfg_players[p2_slug]]
+            res = run_game(team_specs, game_config)
+
+            with lock:
+                progress.update(progress_task, completed=True, visible=False)
+
+            return count, (p1_slug, p2_slug), res
+
+        def producer():
+            rng = Random()
+
+            with session_context() as session:
+                game_counts = {slug: num for slug, num in api.get_game_counts(session).items() if slug in cfg_players}
+
+            for count in range(n):
+                # TODO: Delete failed?
+                # for slug, path in players.items():
+                #     if "error" in path and slug in game_counts:
+                #         del game_counts[slug]
+
+                # choose the player with the least number of played games,
+                # match with another random player
+                # shuffle the sides and let them play
+
+                players_sorted = sorted(list(game_counts.items()), key=operator.itemgetter(1))
+
+                a = players_sorted[0][0]
+                b = rng.choice(players_sorted[1:])[0]
+
+                players = [a, b]
+                rng.shuffle(players)
+
+                _logger.debug(f"Adding match {count} ({players[0]} vs {players[1]}) to worker queue")
+                task = (count, players[0], players[1])
+
+                yield task
+
+                game_counts[a] += 1
+                game_counts[b] += 1
+
+
+        with ThreadPoolExecutor(max_workers=concurrency) as executor:
+            if sys.version_info < (3, 14):
+                _logger.warning(f"Generating all {n} match partners. Use Python 3.14+ to do this lazily.")
+                buffersize = {}
+            else:
+                buffersize = {'buffersize': concurrency * 10}
+
+            for result in executor.map(lambda args: worker(*args), producer(), **buffersize):
+                count, players, res = result
+
+                p1_slug, p2_slug = players
+                winner, final_state, out, p1_out, p2_out = res
+
+                if final_state and final_state["game_phase"] == "FINISHED":
+                    match final_state["whowins"]:
+                        case 0:
+                            progress.console.print(f"Storing #{count}: [u]{players[0]}[/u] against {players[1]}.")
+                        case 1:
+                            progress.console.print(f"Storing #{count}: {players[0]} against [u]{players[1]}[/u].")
+                        case _:
+                            progress.console.print(f"Storing #{count}: {players[0]} against {players[1]}.")
+                    with session_context() as session:
+                        api.add_gameresult(session, p1_slug, p2_slug, winner, final_state, out, p1_out, p2_out)
                 else:
-                    self.dbwrapper.add_display_name(pname, team_name['team_name'])
-
-        for pname in self.players:
-             if 'error' in self.players[pname]:
-                 print(pname, self.players[pname])
-             else:
-                 print(pname, self.players[pname], self.dbwrapper.get_team(pname).display_name)
-
-    def start(self, n, concurrency):
-        """Start the Engine.
-
-        This method will start and run n matches, testing each agent
-        randomly against another one. The result is printed after each
-        game.
-
-        Currently the only way to stop the engine is via CTRL-C.
-
-        Examples
-        --------
-        >>> ci = CI_Engine()
-        >>> ci.start()
-
-        """
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            TimeElapsedColumn()
-        ) as progress:
-
-            lock = threading.Lock()
-
-            def worker(count, p1, p2):
-                with lock:
-                    progress_task = progress.add_task(f"Playing #{count}: {p1} against {p2}.")
-
-                config = {
-                    'rounds': self.rounds,
-                    'size': self.size,
-                    'viewer': self.viewer,
-                    'seed': None, # TODO
-                }
-
-                team_specs = [self.players[p1]['path'], self.players[p2]['path']]
-                res = run_game(team_specs, config)
-
-                with lock:
-                    progress.update(progress_task, completed=True, visible=False)
-
-                return count, (p1, p2), res
-
-            def producer():
-                rng = Random()
-
-                game_counts = self.dbwrapper.get_game_counts()
-
-                for count in range(n):
-                    for pname, player in self.players.items():
-                        if "error" in player and pname in game_counts:
-                            del game_counts[pname]
-
-                    # choose the player with the least number of played games,
-                    # match with another random player
-                    # shuffle the sides and let them play
-
-                    players_sorted = sorted(list(game_counts.items()), key=operator.itemgetter(1))
-
-                    a = players_sorted[0][0]
-                    b = rng.choice(players_sorted[1:])[0]
-
-                    players = [a, b]
-                    rng.shuffle(players)
-
-                    _logger.debug(f"Adding match {count} ({players[0]} vs {players[1]}) to worker queue")
-                    task = (count, players[0], players[1])
-
-                    yield task
-
-                    game_counts[a] += 1
-                    game_counts[b] += 1
+                    progress.console.print(f"Not storing #{count}: {players[0]} against {players[1]}.")
 
 
-            with ThreadPoolExecutor(max_workers=concurrency) as executor:
-                if sys.version_info < (3, 14):
-                    _logger.warning(f"Generating all {n} match partners. Use Python 3.14+ to do this lazily.")
-                    buffersize = {}
-                else:
-                    buffersize = {'buffersize': concurrency * 10}
+def pretty_print_results(full=False, team_slug=None, highlight=None, html_export=None):
+    """Pretty print the current results.
 
-                for result in executor.map(lambda args: worker(*args), producer(), **buffersize):
-                    count, players, res = result
+    """
+    if highlight is None:
+        highlight = []
 
-                    p1_name, p2_name = players
-                    winner, final_state, out, p1_out, p2_out = res
+    console = Console(record=True)
 
-                    if final_state:
-                        match final_state["whowins"]:
-                            case 0:
-                                progress.console.print(f"Storing #{count}: [u]{players[0]}[/u] against {players[1]}.")
-                            case 1:
-                                progress.console.print(f"Storing #{count}: {players[0]} against [u]{players[1]}[/u].")
-                            case _:
-                                progress.console.print(f"Storing #{count}: {players[0]} against {players[1]}.")
-                    else:
-                        progress.console.print(f"Not storing #{count}: {players[0]} against {players[1]}.")
-                    self.dbwrapper.add_gameresult(p1_name, p2_name, winner, final_state, out, p1_out, p2_out)
+    table = Table(title="Bot ranking")
 
-    def get_errorcount(self, p_name):
-        """Gets the error count for team idx
+    table.add_column("Name")
+    table.add_column("# Matches")
+    table.add_column("# Wins")
+    table.add_column("# Draws")
+    table.add_column("# Losses")
+    table.add_column("Score")
+    table.add_column("μ")
+    table.add_column("σ")
+    table.add_column("# Fatal Errors")
 
-        Parameters
-        ----------
-        idx : int
-            the index of the player
-
-        Returns
-        -------
-        fatalerror_count : int
-            the number of errors for this player
-
-        """
-        fatalerror_count = self.dbwrapper.get_errorcount(p_name)
-        return fatalerror_count
-
-    def pretty_print_results(self, full=False, team=None, highlight=None, html_export=None):
-        """Pretty print the current results.
-
-        """
-        if highlight is None:
-            highlight = []
-
-        good_players = [p for p, player in self.players.items() if not player.get('error')]
-        bad_players = [p for p, player in self.players.items() if player.get('error')]
-
-        console = Console(record=True)
-
-        table = Table(title="Bot ranking")
-
-        table.add_column("Name")
-        table.add_column("# Matches")
-        table.add_column("# Wins")
-        table.add_column("# Draws")
-        table.add_column("# Losses")
-        table.add_column("Score")
-        table.add_column("μ")
-        table.add_column("σ")
-        table.add_column("# Fatal Errors")
+    with session_context() as session:
+        teams = api.get_teams(session)
 
         result = []
-        for idx, pname in enumerate(good_players):
-            win, loss, draw = self.dbwrapper.get_result_count(pname)
-            fatalerror_count = self.get_errorcount(pname)
-            mu = self.dbwrapper.get_team(pname).mu
-            sigma = self.dbwrapper.get_team(pname).sigma
-            try:
-                team_name = self.dbwrapper.get_team(pname).display_name
-            except ValueError:
-                team_name = None
+        for team in teams:
+            win, loss, draw = api.get_result_count(session, team.slug)
+            fatalerror_count = api.get_errorcount(session, team.slug)
             score = 0 if (win+loss+draw) == 0 else (win-loss) / (win+loss+draw)
-            result.append([score, win, draw, loss, pname, team_name, mu, sigma, fatalerror_count])
+            result.append([score, win, draw, loss, team.slug, team.display_name, team.mu, team.sigma, fatalerror_count])
 
-        result.sort(reverse=True)
-        for [score, win, draw, loss, name, team_name, mu, sigma, fatalerror_count] in result:
-            style = "bold" if name in highlight else None
-            display_name = f"{name} ({team_name})" if team_name else f"{name}"
-            table.add_row(
-                display_name,
-                f"{win+draw+loss}",
-                f"{win}",
-                f"{draw}",
-                f"{loss}",
-                f"{score:6.3f}",
-                f"{mu:6.2f}",
-                f"{sigma:6.2f}",
-                f"{fatalerror_count}",
-                style=style,
-            )
+    result.sort(reverse=True)
+    for [score, win, draw, loss, name, team_name, mu, sigma, fatalerror_count] in result:
+        style = "bold" if name in highlight else None
+        display_name = f"{name} ({team_name})" if team_name else f"{name}"
+        table.add_row(
+            display_name,
+            f"{win+draw+loss}",
+            f"{win}",
+            f"{draw}",
+            f"{loss}",
+            f"{score:6.3f}",
+            f"{mu:6.2f}",
+            f"{sigma:6.2f}",
+            f"{fatalerror_count}",
+            style=style,
+        )
 
-        console.print(table)
+    console.print(table)
 
-        for p in bad_players:
-            print("% 30s ***%30s***" % (p, self.players[p]['error']))
+    if full:
+        # Some guesswork in here
+        MAX_COLUMNS = (console.width - 40) // 12
+        if MAX_COLUMNS < 4:
+            # Let’s be honest: You should enlarge your terminal window even before that
+            MAX_COLUMNS = 4
 
+        with session_context() as session:
+            res = list(api.get_wins_losses(session))
+        rows = { k: list(v) for k, v in itertools.groupby(res, key=lambda x:x['team']) }
 
-        if full:
-            # Some guesswork in here
-            MAX_COLUMNS = (console.width - 40) // 12
-            if MAX_COLUMNS < 4:
-                # Let’s be honest: You should enlarge your terminal window even before that
-                MAX_COLUMNS = 4
+        num_rows_per_player = (len(teams) // MAX_COLUMNS) + 1
+        row_style = [*([""] * num_rows_per_player), *(["dim"] * num_rows_per_player)]
 
-            res = list(self.dbwrapper.get_wins_losses())
-            rows = { k: list(v) for k, v in itertools.groupby(res, key=lambda x:x['team']) }
+        table = Table(row_styles=row_style, title="Cross results")
+        table.add_column("")
+        table.add_column("Name")
+        table.add_column("Score", justify="right")
+        table.add_column("W/D/L")
 
-            num_rows_per_player = (len(good_players) // MAX_COLUMNS) + 1
-            row_style = [*([""] * num_rows_per_player), *(["dim"] * num_rows_per_player)]
+        column_players = [[] for _idx in range(min(MAX_COLUMNS, len(teams)))]
+        # if we have more teams than allowed columns, we must wrap around
+        for idx, _p in enumerate(teams):
+            column_players[idx % MAX_COLUMNS].append(idx)
 
-            table = Table(row_styles=row_style, title="Cross results")
-            table.add_column("")
-            table.add_column("Name")
-            table.add_column("Score", justify="right")
-            table.add_column("W/D/L")
-
-            column_players = [[] for _idx in range(min(MAX_COLUMNS, len(good_players)))]
-            # if we have more good_players than allowed columns, we must wrap around
-            for idx, _p in enumerate(good_players):
-                column_players[idx % MAX_COLUMNS].append(idx)
-
-            for midx in column_players:
-                table.add_column('\n'.join(map(str, midx)))
+        for midx in column_players:
+            table.add_column('\n'.join(map(str, midx)))
 
 
-            def batched(iterable, n):
-                # Backport from Python 3.12
-                # batched('ABCDEFG', 3) → ABC DEF G
-                if n < 1:
-                    raise ValueError('n must be at least one')
-                iterator = iter(iterable)
-                while batch := tuple(itertools.islice(iterator, n)):
-                    yield batch
+        def batched(iterable, n):
+            # Backport from Python 3.12
+            # batched('ABCDEFG', 3) → ABC DEF G
+            if n < 1:
+                raise ValueError('n must be at least one')
+            iterator = iter(iterable)
+            while batch := tuple(itertools.islice(iterator, n)):
+                yield batch
 
-            for idx, pname in enumerate(good_players):
-                win, loss, draw = self.dbwrapper.get_result_count(pname)
+        with session_context() as session:
+            teams = api.get_teams(session)
 
-                fatalerror_count = self.get_errorcount(pname)
-                try:
-                    team_name = self.dbwrapper.get_team(pname).display_name
-                except ValueError:
-                    team_name = None
+            for idx, team in enumerate(teams):
+                win, loss, draw = api.get_result_count(session, team.slug)
                 score = 0 if (win+loss+draw) == 0 else (win-loss) / (win+loss+draw)
                 wdl = f"{win:3d},{draw:3d},{loss:3d}"
 
                 try:
-                    row = rows[pname]
+                    row = rows[team.slug]
                 except KeyError:
                     continue
                 vals = { e['opponent']: (e['wins'], e['losses'], e['draws']) for e in row }
 
                 cross_results = []
-                for idx2, p2name in enumerate(good_players):
-                    win, loss, draw = vals.get(p2name, (0, 0, 0))
+                for idx2, opponent in enumerate(teams):
+                    win, loss, draw = vals.get(opponent.slug, (0, 0, 0))
                     if idx == idx2:
                         cross_results.append("  - - - ")
                     else:
@@ -488,19 +468,20 @@ class CI_Engine:
 
                 for c, r in enumerate(batched(cross_results, MAX_COLUMNS)):
                     if c == 0:
-                        table.add_row(f"{idx}", pname, f"{score:.2f}", wdl, *r)
+                        table.add_row(f"{idx}", team.slug, f"{score:.2f}", wdl, *r)
                     else:
                         table.add_row("", "", "", "", *r)
 
-            console.print(table)
+        console.print(table)
 
-        elif team:
-            MAX_COLUMNS = (console.width - 40) // 12
-            if MAX_COLUMNS < 4:
-                # Let’s be honest: You should enlarge your terminal window even before that
-                MAX_COLUMNS = 4
+    elif team_slug:
+        MAX_COLUMNS = (console.width - 40) // 12
+        if MAX_COLUMNS < 4:
+            # Let’s be honest: You should enlarge your terminal window even before that
+            MAX_COLUMNS = 4
 
-            res = self.dbwrapper.get_wins_losses(slug=team)
+        with session_context() as session:
+            res = api.get_wins_losses(session, team_slug)
             rows = {k: list(v) for k, v in itertools.groupby(res, key=lambda x:x['team'])}
 
             row_style = ["", "dim"]
@@ -512,21 +493,17 @@ class CI_Engine:
             table.add_column("# Draws")
             table.add_column("# Losses")
 
-            for idx, pname in enumerate(good_players):
+            teams = api.get_teams(session)
+            for idx, team in enumerate(teams):
                 try:
-                    team_name = self.dbwrapper.get_team(pname).display_name
-                except ValueError:
-                    team_name = None
-
-                try:
-                    row = rows[pname]
+                    row = rows[team.slug]
                 except KeyError:
                     continue
 
                 for r in row: # there should only be one row
                     win, loss, draw = r['wins'], r['losses'], r['draws']
 
-                    display_name = f"{pname} ({team_name})" if team_name else f"{pname}"
+                    display_name = f"{team.slug} ({team.display_name})" if team.display_name else f"{team.slug}"
 
                     table.add_row(
                         display_name,
@@ -536,24 +513,30 @@ class CI_Engine:
                         f"{loss}",
                     )
 
-            console.print(table)
+        console.print(table)
 
-        if html_export:
-            console.save_html(html_export)
+    if html_export:
+        console.save_html(html_export)
 
 def run(args):
-    ci_engine = CI_Engine(args.config, args.database, args.db_echo)
+    cfg = read_config(args.config, args.database)
+
+    create_db_engine(cfg.db_url, engine_echo=args.db_echo)
     if not args.no_hash:
-        ci_engine.load_players(concurrency=args.thread_count)
-    ci_engine.start(args.n, args.thread_count)
+        ok_players = load_players(cfg.players, concurrency=args.thread_count)
+    else:
+        ok_players = cfg.players
+    start_engine(cfg, ok_players, args.n, args.thread_count)
 
 def print_scores(args):
-    ci_engine = CI_Engine(args.config, args.database, args.db_echo)
-    ci_engine.pretty_print_results(full=args.full, team=args.team, html_export=args.html_export)
+    cfg = read_config(args.config, args.database)
+    create_db_engine(cfg.db_url, engine_echo=args.db_echo)
+    pretty_print_results(full=args.full, team_slug=args.team, html_export=args.html_export)
 
 def hash_teams(args):
-    ci_engine = CI_Engine(args.config, args.database, args.db_echo)
-    ci_engine.load_players(concurrency=args.thread_count)
+    cfg = read_config(args.config, args.database)
+    create_db_engine(cfg.db_url, engine_echo=args.db_echo)
+    load_players(cfg.players, concurrency=args.thread_count)
 
 def main():
     parser = argparse.ArgumentParser()
