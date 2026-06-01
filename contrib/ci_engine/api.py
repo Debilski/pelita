@@ -5,7 +5,7 @@ from sqlalchemy.orm import aliased
 from sqlmodel import Session, case, func, select
 
 from .db import engine
-from .models import Color, Game, GameOutput, GameParticipant, Outcome, Team
+from .models import Color, Game, GameOutput, GameParticipant, GameParticipantOutput, Outcome, Team
 
 stats_model = PlackettLuce()
 
@@ -193,6 +193,11 @@ def add_gameresult(team1_slug, team2_slug, result, final_state, std, p1_out, p2_
                     sigma_before=team1_oldsigma,
                     mu_after=team1.mu,
                     sigma_after=team2.sigma,
+                    game_participant_output=GameParticipantOutput(
+                        stdout=p1_stdout,
+                        stderr=p1_stderr
+                    )
+
                 ),
                 GameParticipant(
                     team=team2,
@@ -203,12 +208,14 @@ def add_gameresult(team1_slug, team2_slug, result, final_state, std, p1_out, p2_
                     sigma_before=team2_oldsigma,
                     mu_after=team2.mu,
                     sigma_after=team2.sigma,
+                    game_participant_output=GameParticipantOutput(
+                        stdout=p2_stdout,
+                        stderr=p2_stderr
+                    )
                 ),
             ],
             game_output=GameOutput(
                 stdout=stdout, stderr=stderr,
-                player1_stdout=p1_stdout, player1_stderr=p1_stderr,
-                player2_stdout=p2_stdout, player2_stderr=p2_stderr
             )
         )
 
