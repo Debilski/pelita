@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+import uuid
 from enum import IntEnum
 from typing import Optional
 
@@ -41,7 +43,10 @@ class Team(SQLModel, table=True):
 class Game(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
 
+    game_uuid: uuid.UUID = Field()
     final_state: Optional[dict] = Field(sa_column=Column(JSONType))
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     participants: list["GameParticipant"] = Relationship(
         back_populates="game",
@@ -122,6 +127,7 @@ class GameParticipantOutput(SQLModel, table=True):
 
 
 class FinishedGame:
+    game_uuid: uuid.UUID
     result: int | None
     final_state: dict
     game_stdout: str
