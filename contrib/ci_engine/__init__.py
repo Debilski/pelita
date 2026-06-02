@@ -67,6 +67,7 @@ from pelita.tournament import call_pelita, check_team
 
 from . import api, db
 from .db import session_context
+from .models import FinishedGame
 
 _logger = logging.getLogger(__name__)
 
@@ -100,7 +101,7 @@ async def hash_team(team_spec, semaphore):
     return stdout.decode().strip().split("\n")[-1].strip()
 
 
-def run_game(team_specs, config):
+def run_game(team_specs, config) -> FinishedGame:
     """Run a single game.
 
     This method runs a single game and returns the result.
@@ -147,14 +148,20 @@ def run_game(team_specs, config):
         if stderr:
             _logger.warning('Stderr: %r', stderr)
 
-        p1_stdout = (Path(tmpdir) / 'blue.out').read_text()
-        p1_stderr = (Path(tmpdir) / 'blue.err').read_text()
+        finished_game = FinishedGame()
+        finished_game.result = result
+        finished_game.final_state = final_state
 
-        p2_stdout = (Path(tmpdir) / 'red.out').read_text()
-        p2_stderr = (Path(tmpdir) / 'red.err').read_text()
+        finished_game.game_stdout = stdout
+        finished_game.game_stderr = stderr
 
-        res = (result, final_state, [stdout, stderr], [p1_stdout, p1_stderr], [p2_stdout, p2_stderr])
-        return res
+        finished_game.p1_stdout = (Path(tmpdir) / 'blue.out').read_text()
+        finished_game.p1_stderr = (Path(tmpdir) / 'blue.err').read_text()
+
+        finished_game.p2_stdout = (Path(tmpdir) / 'red.out').read_text()
+        finished_game.p2_stderr = (Path(tmpdir) / 'red.err').read_text()
+
+        return finished_game
 
 class Config:
     rounds: int | None
@@ -277,7 +284,7 @@ def start_engine(config, cfg_players, n, concurrency):
 
         lock = threading.Lock()
 
-        def worker(count, p1_slug, p2_slug):
+        def worker(count, p1_slug, p2_slug) -> tuple[int, tuple[str, str], FinishedGame]:
             with lock:
                 progress_task = progress.add_task(f"Playing #{count}: {p1_slug} against {p2_slug}.")
 
@@ -289,12 +296,12 @@ def start_engine(config, cfg_players, n, concurrency):
             }
 
             team_specs = [cfg_players[p1_slug], cfg_players[p2_slug]]
-            res = run_game(team_specs, game_config)
+            finished_game = run_game(team_specs, game_config)
 
             with lock:
                 progress.update(progress_task, completed=True, visible=False)
 
-            return count, (p1_slug, p2_slug), res
+            return count, (p1_slug, p2_slug), finished_game
 
         def producer():
             rng = Random()
@@ -337,23 +344,24 @@ def start_engine(config, cfg_players, n, concurrency):
                 buffersize = {'buffersize': concurrency * 10}
 
             for result in executor.map(lambda args: worker(*args), producer(), **buffersize):
-                count, players, res = result
+                count, player_slugs, finished_game = result
 
-                p1_slug, p2_slug = players
-                winner, final_state, out, p1_out, p2_out = res
+                p1_slug, p2_slug = player_slugs
+
+                final_state = finished_game.final_state
 
                 if final_state and final_state["game_phase"] == "FINISHED":
                     match final_state["whowins"]:
                         case 0:
-                            progress.console.print(f"Storing #{count}: [u]{players[0]}[/u] against {players[1]}.")
+                            progress.console.print(f"Storing #{count}: [u]{p1_slug}[/u] against {p2_slug}.")
                         case 1:
-                            progress.console.print(f"Storing #{count}: {players[0]} against [u]{players[1]}[/u].")
+                            progress.console.print(f"Storing #{count}: {p1_slug} against [u]{p2_slug}[/u].")
                         case _:
-                            progress.console.print(f"Storing #{count}: {players[0]} against {players[1]}.")
+                            progress.console.print(f"Storing #{count}: {p1_slug} against {p2_slug}.")
                     with session_context() as session:
-                        api.add_gameresult(session, p1_slug, p2_slug, winner, final_state, out, p1_out, p2_out)
+                        api.add_gameresult(session, p1_slug, p2_slug, finished_game)
                 else:
-                    progress.console.print(f"Not storing #{count}: {players[0]} against {players[1]}.")
+                    progress.console.print(f"Not storing #{count}: {p1_slug} against {p2_slug}.")
 
 
 def pretty_print_results(full=False, team_slug=None, highlight=None, html_export=None):
