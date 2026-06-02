@@ -6,7 +6,7 @@ from sqlalchemy.orm import aliased
 from sqlmodel import Session, case, func, select
 
 from .db import engine
-from .models import Color, Game, GameOutput, GameParticipant, GameParticipantOutput, Outcome, Team
+from .models import Color, FinishedGame, Game, GameOutput, GameParticipant, GameParticipantOutput, Outcome, Team
 
 stats_model = PlackettLuce()
 
@@ -105,7 +105,7 @@ def remove_team(session: Session, slug):
     session.commit()
 
 
-def add_gameresult(session: Session, team1_slug, team2_slug, result, final_state, std, p1_out, p2_out):
+def add_gameresult(session: Session, team1_slug, team2_slug, finished_game: FinishedGame):
     """Add a new game result to the database.
 
     Parameters
@@ -131,19 +131,15 @@ def add_gameresult(session: Session, team1_slug, team2_slug, result, final_state
             case -1:
                 return [Outcome.DRAW, Outcome.DRAW]
 
-    stdout, stderr = std
-    p1_stdout, p1_stderr = p1_out
-    p2_stdout, p2_stderr = p2_out
-
-    if not final_state:
+    if not finished_game.final_state:
         return
 
     # final_state_str = json.dumps(final_state)
 
-    player1_had_fatal_error = len(final_state["fatal_errors"][0]) != 0
-    player2_had_fatal_error = len(final_state["fatal_errors"][1]) != 0
+    player1_had_fatal_error = len(finished_game.final_state["fatal_errors"][0]) != 0
+    player2_had_fatal_error = len(finished_game.final_state["fatal_errors"][1]) != 0
 
-    outcome = result_to_outcome(result)
+    outcome = result_to_outcome(finished_game.result)
 
     team1 = get_team(session, team1_slug)
     team2 = get_team(session,team2_slug)
@@ -157,7 +153,7 @@ def add_gameresult(session: Session, team1_slug, team2_slug, result, final_state
     r1 = stats_model.rating(mu=team1.mu, sigma=team1.sigma)
     r2 = stats_model.rating(mu=team2.mu, sigma=team2.sigma)
 
-    match result:
+    match finished_game.result:
         case 0:
             new_r1, new_r2 = stats_model.rate(
                 [[r1], [r2]],
@@ -185,7 +181,7 @@ def add_gameresult(session: Session, team1_slug, team2_slug, result, final_state
 
 
     game = Game(
-        final_state=final_state,
+        final_state=finished_game.final_state,
         participants=[
             GameParticipant(
                 team=team1,
@@ -197,8 +193,8 @@ def add_gameresult(session: Session, team1_slug, team2_slug, result, final_state
                 mu_after=team1.mu,
                 sigma_after=team2.sigma,
                 game_participant_output=GameParticipantOutput(
-                    stdout=p1_stdout,
-                    stderr=p1_stderr
+                    stdout=finished_game.p1_stdout,
+                    stderr=finished_game.p1_stderr
                 )
 
             ),
@@ -212,13 +208,13 @@ def add_gameresult(session: Session, team1_slug, team2_slug, result, final_state
                 mu_after=team2.mu,
                 sigma_after=team2.sigma,
                 game_participant_output=GameParticipantOutput(
-                    stdout=p2_stdout,
-                    stderr=p2_stderr
+                    stdout=finished_game.p2_stdout,
+                    stderr=finished_game.p2_stderr
                 )
             ),
         ],
         game_output=GameOutput(
-            stdout=stdout, stderr=stderr,
+            stdout=finished_game.game_stdout, stderr=finished_game.game_stderr,
         )
     )
 

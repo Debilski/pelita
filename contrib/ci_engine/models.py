@@ -104,3 +104,14 @@ class GameParticipantOutput(SQLModel, table=True):
     stderr: str
 
     game_participant: GameParticipant = Relationship(back_populates="game_participant_output")
+
+
+class FinishedGame:
+    result: int | None
+    final_state: dict
+    game_stdout: str
+    game_stderr: str
+    p1_stdout: str
+    p1_stderr: str
+    p2_stdout: str
+    p2_stderr: str
