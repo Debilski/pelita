@@ -52,6 +52,7 @@ import shlex
 import signal
 import sys
 import threading
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from random import Random
@@ -125,6 +126,9 @@ def shrink_replay(data):
             if k in last_record and last_record[k] == record[k]:
                 continue
             else:
+                # skip requested moves; not really important in replay
+                if k == "requested_moves":
+                    continue
                 new_record[k] = v
 
         last_record = dict(record)
@@ -186,6 +190,7 @@ def run_game(team_specs, config) -> FinishedGame:
             _logger.warning('Stderr: %r', stderr)
 
         finished_game = FinishedGame()
+        finished_game.game_uuid = uuid.UUID(final_state['game_uuid'])
         finished_game.result = result
         finished_game.final_state = final_state
 

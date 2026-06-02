@@ -184,6 +184,7 @@ def add_gameresult(session: Session, team1_slug, team2_slug, finished_game: Fini
 
 
     game = Game(
+        game_uuid=finished_game.game_uuid,
         final_state=finished_game.final_state,
         participants=[
             GameParticipant(
