@@ -45,6 +45,7 @@ import argparse
 import asyncio
 import configparser
 import itertools
+import json
 import logging
 import operator
 import shlex
@@ -101,6 +102,40 @@ async def hash_team(team_spec, semaphore):
     return stdout.decode().strip().split("\n")[-1].strip()
 
 
+def shrink_replay(data):
+    # Shrinks a replay given in jsonl str
+
+    def load_jsonls(jsonls):
+        return [json.loads(line) for line in jsonls.split('\n') if line.strip()]
+
+    def dump_jsonls(data):
+        return "\n".join(json.dumps(e, indent=None, separators=(',', ':')) for e in data)
+
+
+    orig_len = len(data)
+
+    records = load_jsonls(data)
+    last_record = {}
+
+    output_records = []
+    for record in records:
+        # print(record, last_record)
+        new_record = {}
+        for k, v in record.items():
+            if k in last_record and last_record[k] == record[k]:
+                continue
+            else:
+                new_record[k] = v
+
+        last_record = dict(record)
+        output_records.append(new_record)
+
+    output = dump_jsonls(output_records)
+    output_len = len(output)
+    _logger.debug(f"Shrunk replay from {orig_len} bytes to {output_len} bytes ({output_len/orig_len:.2%})")
+
+    return output
+
 def run_game(team_specs, config) -> FinishedGame:
     """Run a single game.
 
@@ -154,7 +189,7 @@ def run_game(team_specs, config) -> FinishedGame:
         finished_game.result = result
         finished_game.final_state = final_state
 
-        finished_game.replay = (Path(tmpdir) / 'replay').read_text()
+        finished_game.replay = shrink_replay((Path(tmpdir) / 'replay').read_text())
 
         finished_game.game_stdout = stdout
         finished_game.game_stderr = stderr
