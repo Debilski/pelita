@@ -57,6 +57,13 @@ class Game(SQLModel, table=True):
         },
     )
 
+    game_replay: Optional["GameReplay"] = Relationship(
+        back_populates="game",
+        sa_relationship_kwargs={
+            "cascade": "all, delete-orphan",
+        },
+    )
+
 
 class GameParticipant(SQLModel, table=True):
     __table_args__ = (UniqueConstraint("game_id", "color"),)
@@ -97,6 +104,14 @@ class GameOutput(SQLModel, table=True):
     game: Game = Relationship(back_populates="game_output")
 
 
+class GameReplay(SQLModel, table=True):
+    game_id: int = Field(default=None, primary_key=True, foreign_key="game.id", ondelete="CASCADE")
+
+    replay: dict = Field(sa_column=Column(JSONType))
+
+    game: Game = Relationship(back_populates="game_replay")
+
+
 class GameParticipantOutput(SQLModel, table=True):
     gameparticipant_id: int = Field(default=None, primary_key=True, foreign_key="gameparticipant.id", ondelete="CASCADE")
 
@@ -115,3 +130,4 @@ class FinishedGame:
     p1_stderr: str
     p2_stdout: str
     p2_stderr: str
+    replay: str | None

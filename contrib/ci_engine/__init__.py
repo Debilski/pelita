@@ -112,14 +112,16 @@ def run_game(team_specs, config) -> FinishedGame:
         the indices of the players
 
     """
-
     with TemporaryDirectory() as tmpdir:
+        replay_file = Path(tmpdir) / "replay"
+
         final_state, stdout, stderr = call_pelita(team_specs,
                                                             rounds=config['rounds'],
                                                             size=config['size'],
                                                             viewer=config['viewer'],
                                                             seed=config['seed'],
                                                             store_output=tmpdir,
+                                                            write_replay=str(replay_file),
                                                             timeout=10,
                                                             initial_timeout=120,
                                                             exit_flag=EXIT
@@ -151,6 +153,8 @@ def run_game(team_specs, config) -> FinishedGame:
         finished_game = FinishedGame()
         finished_game.result = result
         finished_game.final_state = final_state
+
+        finished_game.replay = (Path(tmpdir) / 'replay').read_text()
 
         finished_game.game_stdout = stdout
         finished_game.game_stderr = stderr

@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import Sequence
 
@@ -6,9 +7,11 @@ from sqlalchemy.orm import aliased
 from sqlmodel import Session, case, func, select
 
 from .db import engine
-from .models import Color, FinishedGame, Game, GameOutput, GameParticipant, GameParticipantOutput, Outcome, Team
+from .models import Color, FinishedGame, Game, GameOutput, GameParticipant, GameParticipantOutput, GameReplay, Outcome, Team
 
 stats_model = PlackettLuce()
+
+STORE_REPLAY = True
 
 _logger = logging.getLogger(__name__)
 
@@ -218,10 +221,22 @@ def add_gameresult(session: Session, team1_slug, team2_slug, finished_game: Fini
         )
     )
 
+    if finished_game.replay and STORE_REPLAY:
+        # TODO: It should be configurable whether we want to store replays in the db or externally
+        json_data = load_jsonls(finished_game.replay)
+
+        game.game_replay=GameReplay(
+            replay=json_data
+        )
+
     session.add(game)
     session.commit()
     session.refresh(game)
     return game
+
+
+def load_jsonls(jsonls):
+    return [json.loads(line) for line in jsonls.split('\n') if line.strip()]
 
 
 def get_errorcount(session: Session, slug):
