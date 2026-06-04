@@ -385,3 +385,85 @@ def get_wins_losses(session: Session, slug=None):
 
     res = session.exec(stmt).mappings().all()
     return res
+
+
+def get_team_matches(session: Session, slug):
+
+    # aggregate
+    """Get all matches that a team played
+    """
+
+    team = aliased(GameParticipant)
+    opp = aliased(GameParticipant)
+
+    team_player = aliased(Team)
+    opp_player = aliased(Team)
+
+    stmt = (
+        select(
+            Game.id.label("id"),
+            Game.game_uuid.label("game_uuid"),
+            team_player.slug.label("team"),
+            opp_player.slug.label("opponent")
+        )
+        .join(
+            opp,
+            Game.id == opp.game_id,
+        )
+        .join(team, Game.id == team.game_id)
+        .join(team_player, team.team_id == team_player.id)
+        .join(opp_player, opp.team_id == opp_player.id)
+        .where(
+            team_player.slug == slug
+        )
+    )
+
+    res = session.exec(stmt).mappings().all()
+    return res
+
+
+def get_team_opponent_matches(session: Session, slug, opponent_slug):
+    """Get all matches that a team played
+    """
+
+    team = aliased(GameParticipant)
+    opp = aliased(GameParticipant)
+
+    team_player = aliased(Team)
+    opp_player = aliased(Team)
+
+    stmt = (
+        select(
+            Game.id.label("id"),
+            Game.game_uuid.label("game_uuid"),
+            team_player.slug.label("team"),
+            team.outcome.label("outcome"),
+            opp_player.slug.label("opponent")
+        )
+        .join(opp, Game.id == opp.game_id)
+        .join(team, Game.id == team.game_id)
+        .join(team_player, team.team_id == team_player.id)
+        .join(opp_player, opp.team_id == opp_player.id)
+        .where(team_player.slug == slug)
+        .where(opp_player.slug == opponent_slug)
+    )
+
+    res = session.exec(stmt).mappings().all()
+    return res
+
+
+def get_game_replay(session: Session, game_uuid):
+    """Get all matches that a team played
+    """
+
+    stmt = (
+        select(
+            # Game.game_uuid.label("game_uuid"),
+            GameReplay.replay
+        )
+        .join(Game, Game.id == GameReplay.game_id)
+        .where(Game.game_uuid == game_uuid)
+    )
+
+    res = session.exec(stmt).one()
+    return res
