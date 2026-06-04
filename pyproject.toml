@@ -55,7 +55,8 @@ test = [
 doc = ["sphinx"]
 ci_engine = [
     "sqlmodel",
-    "openskill"
+    "openskill",
+    "fastapi"
 ]
 
 [tool.aliases]
