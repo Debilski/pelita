@@ -50,7 +50,7 @@ def create_app() -> FastAPI:
         result = []
         for team in teams:
             win, loss, draw = api.get_result_count(session, team.slug)
-            error_count, fatalerror_count = api.get_errorcount(session, team.slug)
+            fatalerror_count = api.get_errorcount(session, team.slug)
             score = 0 if (win+loss+draw) == 0 else (win-loss) / (win+loss+draw)
             result.append({
                 "id": team.id,
@@ -62,7 +62,7 @@ def create_app() -> FastAPI:
                 "display_name": team.display_name,
                 "mu": team.mu,
                 "sigma": team.sigma,
-                "num_timeouts": error_count,
+                "num_timeouts": 0, # TODO !FIXME REMOVE
                 "num_fatals": fatalerror_count
                 })
 
