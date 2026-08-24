@@ -438,6 +438,7 @@ def get_team_opponent_matches(session: Session, slug, opponent_slug):
             Game.game_uuid.label("game_uuid"),
             team_player.slug.label("team"),
             team.outcome.label("outcome"),
+            team.had_fatal_error.label("had_fatal_error"),
             team.color.label("team_color"),
             opp_player.slug.label("opponent")
         )
