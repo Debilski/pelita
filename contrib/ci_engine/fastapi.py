@@ -9,6 +9,9 @@ from sqlmodel import Session
 from . import api, create_db_engine
 from .db import session_context_yield as session_context
 
+# Maximum number or matches to return between two teams
+LIMIT_MAX_MATCHES = 30
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -78,9 +81,9 @@ def create_app() -> FastAPI:
 
 
     @app.get("/team_opponent/matches/{slug}/{opponent}")
-    def team_opponent_matches(slug: str, opponent: str, session: Session = Depends(session_context)):
-        result = api.get_team_opponent_matches(session, slug, opponent)
-        print(result)
+    def team_opponent_matches(slug: str, opponent: str, limit: int = LIMIT_MAX_MATCHES, session: Session = Depends(session_context)):
+        result = api.get_team_opponent_matches(session, slug, opponent, limit=limit)
+        # print(result)
         return result
 
     @app.get("/game_replay/{game_uuid}")
