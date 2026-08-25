@@ -78,9 +78,9 @@ def create_app() -> FastAPI:
 
 
     @app.get("/team_opponent/matches/{slug}/{opponent}")
-    def team_opponent_matches(slug: str, opponent: str, session: Session = Depends(session_context)):
-        result = api.get_team_opponent_matches(session, slug, opponent)
-        print(result)
+    def team_opponent_matches(slug: str, opponent: str, limit: int = 30, session: Session = Depends(session_context)):
+        result = api.get_team_opponent_matches(session, slug, opponent, limit=limit)
+        # print(result)
         return result
 
     @app.get("/game_replay/{game_uuid}")

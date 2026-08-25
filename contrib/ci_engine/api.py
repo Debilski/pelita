@@ -422,7 +422,7 @@ def get_team_matches(session: Session, slug):
     return res
 
 
-def get_team_opponent_matches(session: Session, slug, opponent_slug):
+def get_team_opponent_matches(session: Session, slug, opponent_slug, limit=None):
     """Get all matches that a team played
     """
 
@@ -448,7 +448,11 @@ def get_team_opponent_matches(session: Session, slug, opponent_slug):
         .join(opp_player, opp.team_id == opp_player.id)
         .where(team_player.slug == slug)
         .where(opp_player.slug == opponent_slug)
+        .order_by(Game.id.desc())
     )
+
+    if limit is not None:
+        stmt = stmt.limit(limit)
 
     res = session.exec(stmt).mappings().all()
     return res
