@@ -404,6 +404,8 @@ def start_engine(config, cfg_players, n, concurrency):
                             progress.console.print(f"Storing #{count}: {p1_slug} against {p2_slug}.")
                     with session_context() as session:
                         api.add_gameresult(session, p1_slug, p2_slug, finished_game)
+                    with session_context() as session:
+                        api.prune_pairing_artifacts(session, p1_slug, p2_slug)
                 else:
                     progress.console.print(f"Not storing #{count}: {p1_slug} against {p2_slug}.")
 

@@ -4,7 +4,7 @@ from typing import Sequence
 
 from openskill.models import PlackettLuce
 from sqlalchemy.orm import aliased
-from sqlmodel import Session, case, func, select
+from sqlmodel import Session, case, delete, func, select
 
 from .db import engine
 from .models import Color, FinishedGame, Game, GameOutput, GameParticipant, GameParticipantOutput, GameReplay, Outcome, Team
@@ -473,3 +473,85 @@ def get_game_replay(session: Session, game_uuid):
 
     res = session.exec(stmt).one()
     return res
+
+
+def prune_pairing_artifacts(
+    session: Session,
+    slug: str,
+    opponent_slug: str,
+    keep: int = 50,
+) -> int:
+    """
+    Remove large game artifacts for games older than the `keep` most
+    recent games
+
+    Game and GameParticipant rows are retained.
+
+    Returns the number of games for which artifacts were removed.
+    """
+
+    if keep < 0:
+        raise ValueError("keep must be >= 0")
+
+    # Find the two teams.
+    teams = session.exec(select(Team).where(Team.slug.in_([slug, opponent_slug]))).all()
+
+    if len(teams) != 2:
+        raise ValueError(f"Could not find both teams: {slug!r}, {opponent_slug!r}")
+
+    team_ids = [team.id for team in teams]
+
+    # Find games containing both teams.
+    #
+    # GROUP BY game_id + HAVING COUNT(DISTINCT team_id) = 2 ensures
+    # that both teams participated in the game.
+    pairing_games = (
+        select(
+            Game.id,
+            Game.created_at,
+        )
+        .join(GameParticipant)
+        .where(GameParticipant.team_id.in_(team_ids))
+        .group_by(Game.id)
+        .having(
+            # Both requested teams must occur in the game.
+            func.count(func.distinct(GameParticipant.team_id)) == 2
+        )
+        .order_by(
+            Game.id.desc(),
+        )
+    )
+
+    # Keep the newest `keep` games and prune everything else.
+    game_ids = [game_id for game_id, _ in session.exec(pairing_games).all()]
+
+    game_ids_to_prune = game_ids[keep:]
+
+    if not game_ids_to_prune:
+        return 0
+
+    # Find participant IDs before deleting their output.
+    participant_ids = list(
+        session.exec(
+            select(GameParticipant.id).where(
+                GameParticipant.game_id.in_(game_ids_to_prune)
+            )
+        )
+    )
+
+    # Delete participant output.
+    if participant_ids:
+        session.exec(
+            delete(GameParticipantOutput).where(
+                GameParticipantOutput.gameparticipant_id.in_(participant_ids)
+            )
+        )
+
+    # Delete game-level output.
+    session.exec(delete(GameOutput).where(GameOutput.game_id.in_(game_ids_to_prune)))
+
+    # Delete replay.
+    session.exec(delete(GameReplay).where(GameReplay.game_id.in_(game_ids_to_prune)))
+
+    session.commit()
+    return len(game_ids_to_prune)
