@@ -405,7 +405,9 @@ def start_engine(config, cfg_players, n, concurrency):
                     with session_context() as session:
                         api.add_gameresult(session, p1_slug, p2_slug, finished_game)
                     with session_context() as session:
-                        api.prune_pairing_artifacts(session, p1_slug, p2_slug)
+                        n_pruned = api.prune_pairing_artifacts(session, p1_slug, p2_slug)
+                        if n_pruned > 0:
+                            _logger.debug(f"Throwing away old match data {p1_slug} vs {p2_slug}: {n_pruned} pruned.")
                 else:
                     progress.console.print(f"Not storing #{count}: {p1_slug} against {p2_slug}.")
 
