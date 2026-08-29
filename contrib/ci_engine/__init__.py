@@ -243,7 +243,7 @@ def read_config(cfgfile, database=None) -> Config:
     return cfg
 
 def create_db_engine(db_url, engine_echo):
-    db.engine = db.create_engine(db_url, echo=engine_echo)
+    db.engine = db.create_engine(db_url, echo=engine_echo, pool_pre_ping=True, pool_recycle=1800)
     db.create_db_and_tables()
 
 
