@@ -479,7 +479,7 @@ def prune_pairing_artifacts(
     session: Session,
     slug: str,
     opponent_slug: str,
-    keep: int = 50,
+    keep: int = 30,
 ) -> int:
     """
     Remove large game artifacts for games older than the `keep` most
