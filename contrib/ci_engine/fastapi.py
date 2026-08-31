@@ -99,6 +99,11 @@ def create_app() -> FastAPI:
         # print(restored[-1])
         return restored
 
+    @app.get("/game_output/{game_uuid}")
+    def game_output(game_uuid: str, session: Session = Depends(session_context)):
+        result = api.get_game_logs_dict(session, uuid.UUID(game_uuid))
+        return result
+
     return app
 
 

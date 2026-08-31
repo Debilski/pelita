@@ -1,9 +1,10 @@
 import json
 import logging
 from typing import Sequence
+import uuid
 
 from openskill.models import PlackettLuce
-from sqlalchemy.orm import aliased
+from sqlalchemy.orm import aliased, selectinload
 from sqlmodel import Session, case, delete, func, select
 
 from .db import engine
@@ -473,6 +474,41 @@ def get_game_replay(session: Session, game_uuid):
 
     res = session.exec(stmt).one()
     return res
+
+
+def get_game_logs(session: Session, game_uuid: uuid.UUID) -> Game:
+    game = session.exec(
+        select(Game)
+        .where(Game.game_uuid == game_uuid)
+        .options(
+            selectinload(Game.game_output),
+            selectinload(Game.participants).selectinload(
+                GameParticipant.game_participant_output
+            ),
+            selectinload(Game.participants).selectinload(
+                GameParticipant.team
+            ),
+        )
+    ).one()
+
+    return game
+
+def get_game_logs_dict(session: Session, game_uuid: uuid.UUID) -> dict:
+    game = get_game_logs(session, game_uuid)
+
+    return {
+        "game_stdout": game.game_output.stdout if game.game_output else None,
+        "game_stderr": game.game_output.stderr if game.game_output else None,
+        "participants": [
+            {
+                "team": p.team.slug,
+                "color": p.color,
+                "stdout": p.game_participant_output.stdout if p.game_participant_output else None,
+                "stderr": p.game_participant_output.stderr if p.game_participant_output else None,
+            }
+            for p in game.participants
+        ],
+    }
 
 
 def prune_pairing_artifacts(
